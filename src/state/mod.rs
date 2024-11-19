@@ -3,7 +3,7 @@ use alloy::primitives::Sign;
 
 use crate::constraints::SignedConstraints;
 pub struct ConstraintState {
-  blocks: HashMap<u64, Block>
+  pub blocks: HashMap<u64, Block>
 }
 
 impl ConstraintState {

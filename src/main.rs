@@ -34,7 +34,7 @@ async fn main() {
     let mut ikm = [0u8; 32];
     rng.fill_bytes(&mut ikm);
     let signer_key = SecretKey::key_gen(&ikm, &[]).unwrap();
-    
+
     loop {
         tokio::select! {
             Some( CommitmentRequestEvent{req, res} ) = receiver.recv() => {
@@ -45,6 +45,8 @@ async fn main() {
                 let signature =  BLSBytes::from(signer_key.sign(&message.digest(), BLS_DST_PREFIX, &[]).to_bytes()).to_string();
                 let signed_constraints = SignedConstraints { message, signature };
                 constraint_state.add_constraint(slot, signed_constraints);
+
+                tracing::info!("{:#?}", constraint_state.blocks);
 
                 let response = serde_json::to_value( PreconfResponse { ok: true}).map_err(Into::into);
                 let _ = res.send(response).ok();
