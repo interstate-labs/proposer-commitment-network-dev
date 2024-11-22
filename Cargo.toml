@@ -7,6 +7,10 @@ edition = "2021"
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["macros"] }
 axum-server = "0.7"
+reqwest = "0.12"
+futures = "0.3"
+
+ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus", rev = "cf3c404" }
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "f55d43c" }
 alloy = { version = "0.2.0", features = ["full", "provider-trace-api", "rpc-types-beacon", "rpc-types-engine"] }
 
@@ -16,6 +20,7 @@ lru = "0.12.3"
 
 blst = "0.3.12"
 secp256k1 = { version = "0.29.0", features = ["rand"] }
+
 
 eyre = "0.6.12"
 thiserror = "2.0.3"

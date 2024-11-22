@@ -12,6 +12,7 @@ mod commitment;
 mod controller;
 mod state;
 mod constraints;
+mod errors;
 
 pub type BLSBytes = FixedBytes<96>;
 
@@ -50,6 +51,19 @@ async fn main() {
 
                 let response = serde_json::to_value( PreconfResponse { ok: true}).map_err(Into::into);
                 let _ = res.send(response).ok();
+            },
+            Some(slot) = constraint_state.commitment_deadline.wait() => {
+                tracing::info!("The commitment deadline is reached in slot {}", slot);
+
+                let Some(block) = constraint_state.remove_constraints_at_slot(slot) else {
+                    tracing::debug!("Couldn't find a block at slot {slot}");
+                    continue;
+                };
+                tracing::debug!("revmoed constraints at slot {slot}");
+
+
+
+
             }
         }
     }
