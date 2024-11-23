@@ -1,17 +1,20 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, net::SocketAddr, str::FromStr, sync::Arc};
 
 use alloy::{hex, primitives::{keccak256, Address}};
+use axum::{Router, extract::{Path, State}, response::Html, routing::{ get, post }, Json};
 use builder::{GetHeaderParams, GetPayloadResponse, SignedBuilderBid};
 use reth_primitives::PooledTransactionsElement;
 use ethereum_consensus::{ builder::SignedValidatorRegistration, deneb::mainnet::SignedBlindedBeaconBlock, Fork,};
 
 use serde::{Deserialize, Serialize};
+
 use reqwest::{ Client, ClientBuilder, StatusCode, Url };
-use crate::{commitment::{self, request::{serialize_tx, PreconfRequest}}, errors::{CommitBoostError, ErrorResponse}};
+
+use crate::{commitment::{request::{serialize_tx, PreconfRequest}}, errors::{CommitBoostError, ErrorResponse}};
+use crate::config::Config;
 
 mod builder;
 mod constraint;
-use secp256k1::Message;
 
 /// The path to the builder API status endpoint.
 pub const STATUS_PATH: &str = "/eth/v1/builder/status";
@@ -23,7 +26,6 @@ pub const GET_HEADER_PATH: &str = "/eth/v1/builder/header/:slot/:parent_hash/:pu
 pub const GET_PAYLOAD_PATH: &str = "/eth/v1/builder/blinded_blocks";
 /// The path to the constraints API submit constraints endpoint.
 pub const CONSTRAINTS_PATH: &str = "/eth/v1/builder/constraints";
-
 
 #[derive(Serialize, Debug, Clone, PartialEq, Default)]
 pub struct SignedConstraints {
@@ -102,7 +104,7 @@ impl Constraint {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CommitBoostApi {
     url: Url,
     client: Client
@@ -264,3 +266,86 @@ pub struct VersionedValue<T> {
     pub meta: HashMap<String, serde_json::Value>,
 }
 
+pub async fn run_commit_booster (config:&Config) {
+
+    //TODO: replace commit-boost url
+    let commit_booster: Arc<CommitBoostApi> = Arc::new(CommitBoostApi::new(config.commit_boost_url.clone()));
+
+    let router = Router::new()
+    .route("/", get(description))
+    .route(STATUS_PATH, get(status))
+    .route(
+        REGISTER_VALIDATORS_PATH,
+        post(register_validators),
+    )
+    .route(GET_HEADER_PATH, get(get_header))
+    .route(GET_PAYLOAD_PATH, post(get_payload))
+    .with_state(commit_booster);
+
+    let addr: SocketAddr = SocketAddr::from(([0,0,0,0], config.builder_port));
+
+    //TODO: replace a listening port as a builder
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+
+    tokio::spawn( async {
+        axum::serve(listener, router).await.unwrap();
+    });
+
+    tracing::info!("commit boost server is listening on .. {}", addr);
+}
+
+async fn description() -> Html<& 'static str> {
+    Html("This is an endpoint to interact with commit-boost")
+}
+
+async fn status(State(api):State<Arc<CommitBoostApi>>) -> StatusCode {
+    tracing::debug!("handling STATUS request");
+
+    let status = match api.status().await {
+        Ok(status) => status,
+        Err(err) => {
+            tracing::error!(%err, "Failed in getting status from commit-boost");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    };
+
+    status
+}
+
+async fn get_header( State(api):State<Arc<CommitBoostApi>>, Path(params): Path<GetHeaderParams>) -> Result<Json<VersionedValue<SignedBuilderBid>>, CommitBoostError> {
+    tracing::debug!("handling GET_HEADER request");
+    match api.get_header_with_proofs(params).await {
+        Ok(header) => {
+            return Ok(Json(header));
+        },
+        Err(err) => {
+            tracing::error!("Failed in getting header with proof from commit-boost");
+            return Err(err);
+        }
+    }
+}
+
+async fn get_payload( State(api): State<Arc<CommitBoostApi>>, Json(signed_blinded_block):Json<SignedBlindedBeaconBlock>) -> Result<Json<GetPayloadResponse>, CommitBoostError> {
+    tracing::debug!("handling GET_PAYLOAD request");
+
+    match api
+            .get_payload(signed_blinded_block)
+            .await
+            .map(Json)
+            .map_err(|e| {
+                tracing::error!(%e, "Failed to get payload from mev-boost");
+                e
+            })
+    {
+        Ok(payload) => return Ok(payload),
+        Err(err) => {
+            tracing::error!("Failed in getting payload from commit-boost");
+            return Err(err);
+        }
+    };
+}
+
+async fn register_validators( State(api):State<Arc<CommitBoostApi>>, Json(registors):Json<Vec<SignedValidatorRegistration>>) -> Result<StatusCode, CommitBoostError> {
+    tracing::debug!("handling REGISTER_VALIDATORS_REQUEST");
+    api.register_validators(registors).await.map(|_| StatusCode::OK)
+}

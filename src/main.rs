@@ -1,18 +1,21 @@
 use alloy::primitives::FixedBytes;
-use controller::{run_commitment_rpc_server, PreconfResponse};
 use rand::RngCore;
 use state::ConstraintState;
 use tokio::sync::mpsc;
 use commitment::request::CommitmentRequestEvent;
 use tracing_subscriber::fmt::Subscriber;
-use constraints::{ ConstraintsMessage, SignedConstraints };
 use blst::min_pk::SecretKey;
 
+use constraints::{run_commit_booster, ConstraintsMessage, SignedConstraints };
+use commitment::{run_commitment_rpc_server, PreconfResponse};
+use config::Config;
+
 mod commitment;
-mod controller;
 mod state;
 mod constraints;
 mod errors;
+mod config;
+mod utils;
 
 pub type BLSBytes = FixedBytes<96>;
 
@@ -26,10 +29,14 @@ async fn main() {
     tracing::subscriber::set_global_default(subscriber)
         .expect("setting default subscriber failed");
 
+    let config = Config::parse_from_cli().unwrap();
+
     let ( sender, mut receiver ) = mpsc::channel(1024);
-    run_commitment_rpc_server(sender).await;
+
+    run_commitment_rpc_server(sender, &config).await;
+    run_commit_booster(&config).await;
+
     let mut constraint_state = ConstraintState::new();
-    tracing::debug!("started rpc server");
 
     let mut rng = rand::thread_rng();
     let mut ikm = [0u8; 32];
