@@ -82,8 +82,8 @@ impl ChainConfig {
         }
     }
 
-    /// get commitment deadline.
-    pub fn commitment_deadline(&self) -> Duration {
+    /// get duration of commitment deadline.
+    pub fn get_commitment_deadline_duration(&self) -> Duration {
         Duration::from_millis(self.commitment_deadline)
     }
 }

@@ -1,10 +1,12 @@
-use alloy::primitives::FixedBytes;
+use alloy::{primitives::FixedBytes, rpc::types::beacon::events::HeadEvent};
 use rand::RngCore;
-use state::ConstraintState;
+use state::{ ConstraintState, HeadEventListener };
 use tokio::sync::mpsc;
 use commitment::request::CommitmentRequestEvent;
 use tracing_subscriber::fmt::Subscriber;
 use blst::min_pk::SecretKey;
+
+pub use beacon_api_client::mainnet::Client;
 
 use constraints::{run_commit_booster, ConstraintsMessage, SignedConstraints };
 use commitment::{run_commitment_rpc_server, PreconfResponse};
@@ -36,12 +38,16 @@ async fn main() {
     run_commitment_rpc_server(sender, &config).await;
     run_commit_booster(&config).await;
 
-    let mut constraint_state = ConstraintState::new();
+    let beacon_client = Client::new(config.beacon_api_url.clone());
+
+    let mut constraint_state = ConstraintState::new( beacon_client.clone(), config.validator_indexes.clone(), config.chain.get_commitment_deadline_duration());
 
     let mut rng = rand::thread_rng();
     let mut ikm = [0u8; 32];
     rng.fill_bytes(&mut ikm);
     let signer_key = SecretKey::key_gen(&ikm, &[]).unwrap();
+
+    let mut head_event_listener = HeadEventListener::run(beacon_client);
 
     loop {
         tokio::select! {
@@ -68,10 +74,15 @@ async fn main() {
                 };
                 tracing::debug!("revmoed constraints at slot {slot}");
 
+            },
+            Ok(HeadEvent { slot, .. }) = head_event_listener.next_head() => {
+                tracing::info!(slot, "Got received a new head event");
 
-
-
-            }
+                // We use None to signal that we want to fetch the latest EL head
+                if let Err(e) = constraint_state.update_head(slot).await {
+                    tracing::error!(err = ?e, "Occurred errors in updating the constraint state head");
+                }
+            },
         }
     }
 
