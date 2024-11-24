@@ -64,7 +64,6 @@ pub struct PreconfRequest {
   #[serde(deserialize_with = "deserialize_tx", serialize_with = "serialize_tx")]
   pub tx: PooledTransactionsElement,
 
-  #[serde(skip)]
   pub(crate) sender: Address,
 }
 
@@ -97,6 +96,7 @@ pub fn serialize_tx<S>(
 where
     S: serde::Serializer,
 {
+    tracing::debug!("start to serialize");
     let mut data = Vec::new();
     tx.encode_enveloped(&mut data);
     serializer.serialize_str(&format!("0x{}", hex::encode(&data)))

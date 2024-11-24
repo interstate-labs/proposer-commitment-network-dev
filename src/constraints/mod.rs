@@ -1,6 +1,6 @@
 use std::{collections::HashMap, net::SocketAddr, str::FromStr, sync::Arc};
 
-use alloy::{hex, primitives::{keccak256, Address}};
+use alloy::{hex, primitives::{keccak256, Address, FixedBytes}};
 use axum::{Router, extract::{Path, State}, response::Html, routing::{ get, post }, Json};
 use builder::{GetHeaderParams, GetPayloadResponse, SignedBuilderBid};
 use reth_primitives::PooledTransactionsElement;
@@ -14,7 +14,6 @@ use crate::{commitment::{request::{serialize_tx, PreconfRequest}}, errors::{Comm
 use crate::config::Config;
 
 mod builder;
-mod constraint;
 
 /// The path to the builder API status endpoint.
 pub const STATUS_PATH: &str = "/eth/v1/builder/status";
@@ -25,14 +24,14 @@ pub const GET_HEADER_PATH: &str = "/eth/v1/builder/header/:slot/:parent_hash/:pu
 /// The path to the builder API get payload endpoint.
 pub const GET_PAYLOAD_PATH: &str = "/eth/v1/builder/blinded_blocks";
 /// The path to the constraints API submit constraints endpoint.
-pub const CONSTRAINTS_PATH: &str = "/eth/v1/builder/constraints";
+pub const CONSTRAINTS_PATH: &str = "/constraints/v1/builder/constraints";
 
 #[derive(Serialize, Debug, Clone, PartialEq, Default)]
 pub struct SignedConstraints {
     /// The constraints that need to be signed.
     pub message: ConstraintsMessage,
     /// The signature of the proposer sidecar.
-    pub signature: String,
+    pub signature: FixedBytes<96>,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Default)]
@@ -77,9 +76,8 @@ impl ConstraintsMessage {
 #[derive(Serialize, Debug, Clone, PartialEq)]
 pub struct Constraint {
     pub index: Option<u64>,
-    #[serde(serialize_with = "serialize_tx")]
-    pub(crate) tx: PooledTransactionsElement,
-    #[serde(skip)]
+    #[serde(rename(serialize = "tx"), serialize_with = "serialize_tx")]
+    pub(crate) transaction: PooledTransactionsElement,
     pub(crate) sender: Address,
 }
 
@@ -90,7 +88,7 @@ impl Constraint {
       sender: Address,
     ) -> Self {
         Self {
-            tx,
+            transaction:tx,
             index,
             sender,
         }
@@ -98,7 +96,7 @@ impl Constraint {
 
     pub fn as_bytes(&self) -> Vec<u8> {
         let mut data = Vec::new();
-        self.tx.encode_enveloped(&mut data);
+        self.transaction.encode_enveloped(&mut data);
         data.extend_from_slice(&self.index.unwrap_or(0).to_le_bytes());
         data
     }
@@ -114,7 +112,7 @@ impl CommitBoostApi {
     pub fn new (url: Url) -> Self {
         Self {
             url,
-            client: ClientBuilder::new().user_agent("interstate-sidecar").build().unwrap()
+            client: ClientBuilder::new().user_agent("interstate-boost").build().unwrap()
         }
     }
 
@@ -201,10 +199,13 @@ impl CommitBoostApi {
         Ok(payload)
     }
 
-    async fn send_constraints(
+    pub async fn send_constraints(
         &self,
         constraints: &Vec<SignedConstraints>,
     ) -> Result<(), CommitBoostError> {
+
+        tracing::debug!("constraints to be sent: {:#?}", constraints);
+
         let response = self
             .client
             .post(self.url.join(CONSTRAINTS_PATH).unwrap())
@@ -213,10 +214,13 @@ impl CommitBoostApi {
             .send()
             .await?;
 
-        if response.status() != StatusCode::OK {
-            let error = response.json::<ErrorResponse>().await?;
-            return Err(CommitBoostError::FailedSubmittingConstraints(error));
-        }
+        // let response_text = response.text().await?;
+        tracing::info!("response status: {}", response.status());
+
+        // if response.status() != StatusCode::OK {
+        //     let error = response.json::<ErrorResponse>().await?;
+        //     return Err(CommitBoostError::FailedSubmittingConstraints(error));
+        // }
 
         Ok(())
     }
@@ -266,7 +270,7 @@ pub struct VersionedValue<T> {
     pub meta: HashMap<String, serde_json::Value>,
 }
 
-pub async fn run_commit_booster (config:&Config) {
+pub async fn run_commit_booster (config:&Config) -> CommitBoostApi {
 
     //TODO: replace commit-boost url
     let commit_booster: Arc<CommitBoostApi> = Arc::new(CommitBoostApi::new(config.commit_boost_url.clone()));
@@ -292,6 +296,8 @@ pub async fn run_commit_booster (config:&Config) {
     });
 
     tracing::info!("commit boost server is listening on .. {}", addr);
+
+    CommitBoostApi::new(config.commit_boost_url.clone())
 }
 
 async fn description() -> Html<& 'static str> {

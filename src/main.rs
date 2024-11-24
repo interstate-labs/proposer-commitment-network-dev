@@ -8,6 +8,8 @@ use blst::min_pk::SecretKey;
 
 pub use beacon_api_client::mainnet::Client;
 
+use env_file_reader::read_file;
+
 use constraints::{run_commit_booster, ConstraintsMessage, SignedConstraints };
 use commitment::{run_commitment_rpc_server, PreconfResponse};
 use config::Config;
@@ -31,12 +33,14 @@ async fn main() {
     tracing::subscriber::set_global_default(subscriber)
         .expect("setting default subscriber failed");
 
-    let config = Config::parse_from_cli().unwrap();
+    // let config = Config::parse_from_cli().unwrap();
+    let envs = read_file("/work/proposer-commitment-network/.env").unwrap();
 
     let ( sender, mut receiver ) = mpsc::channel(1024);
+    let config = Config::new(&envs["COMMITMENT_PORT"],&envs["BUILDER_PORT"],&envs["COMMIT_BOOST_URL"],&envs["BEACON_API_URL"], &envs["PRIVATE_KEY"], &envs["JWT_HEX"], &envs["VALIDATOR_INDEXES"], &envs["CHAIN"], &envs["COMMITMENT_DEADLINE"], &envs["SLOT_TIME"]);
 
     run_commitment_rpc_server(sender, &config).await;
-    run_commit_booster(&config).await;
+    let commit_boost_api = run_commit_booster(&config).await;
 
     let beacon_client = Client::new(config.beacon_api_url.clone());
 
@@ -56,11 +60,9 @@ async fn main() {
                 let slot = req.slot;
                 
                 let message = ConstraintsMessage::build(10, req);
-                let signature =  BLSBytes::from(signer_key.sign(&message.digest(), BLS_DST_PREFIX, &[]).to_bytes()).to_string();
+                let signature =  BLSBytes::from(signer_key.sign(&message.digest(), BLS_DST_PREFIX, &[]).to_bytes());
                 let signed_constraints = SignedConstraints { message, signature };
                 constraint_state.add_constraint(slot, signed_constraints);
-
-                tracing::info!("{:#?}", constraint_state.blocks);
 
                 let response = serde_json::to_value( PreconfResponse { ok: true}).map_err(Into::into);
                 let _ = res.send(response).ok();
@@ -72,7 +74,12 @@ async fn main() {
                     tracing::debug!("Couldn't find a block at slot {slot}");
                     continue;
                 };
-                tracing::debug!("revmoed constraints at slot {slot}");
+                tracing::debug!("removed constraints at slot {slot}");
+
+                match commit_boost_api.send_constraints(&block.signed_constraints_list).await {
+                    Ok(_) => tracing::info!("Sent constratins successfully."),
+                    Err(err) => tracing::error!(err = ?err, "Error sending constraints, retrying...")
+                };
 
             },
             Ok(HeadEvent { slot, .. }) = head_event_listener.next_head() => {
