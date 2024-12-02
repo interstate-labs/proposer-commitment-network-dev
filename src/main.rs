@@ -10,7 +10,7 @@ pub use beacon_api_client::mainnet::Client;
 
 use env_file_reader::read_file;
 
-use constraints::{run_commit_booster, ConstraintsMessage, SignedConstraints };
+use constraints::{run_constraints_proxy_server, FallbackPayloadFetcher, FetchPayloadRequest, ConstraintsMessage, FallbackBuilder, SignedConstraints };
 use commitment::{run_commitment_rpc_server, PreconfResponse};
 use config::Config;
 
@@ -37,10 +37,14 @@ async fn main() {
     let envs = read_file("/work/proposer-commitment-network/.env").unwrap();
 
     let ( sender, mut receiver ) = mpsc::channel(1024);
-    let config = Config::new(&envs["COMMITMENT_PORT"],&envs["BUILDER_PORT"],&envs["COMMIT_BOOST_URL"],&envs["BEACON_API_URL"], &envs["PRIVATE_KEY"], &envs["JWT_HEX"], &envs["VALIDATOR_INDEXES"], &envs["CHAIN"], &envs["COMMITMENT_DEADLINE"], &envs["SLOT_TIME"]);
+    let config = Config::new(envs);
 
     run_commitment_rpc_server(sender, &config).await;
-    let commit_boost_api = run_commit_booster(&config).await;
+
+    let (payload_tx, mut payload_rx) = mpsc::channel(16);
+    let payload_fetcher = FallbackPayloadFetcher::new(payload_tx);
+
+    let commit_boost_api = run_constraints_proxy_server(&config, payload_fetcher).await.unwrap();
 
     let beacon_client = Client::new(config.beacon_api_url.clone());
 
@@ -52,6 +56,8 @@ async fn main() {
     let signer_key = SecretKey::key_gen(&ikm, &[]).unwrap();
 
     let mut head_event_listener = HeadEventListener::run(beacon_client);
+
+    let mut fallback_builder = FallbackBuilder::new(&config);
 
     loop {
         tokio::select! {
@@ -81,6 +87,25 @@ async fn main() {
                     Err(err) => tracing::error!(err = ?err, "Error sending constraints, retrying...")
                 };
 
+                if let Err(e) = fallback_builder.build_fallback_payload(&block).await {
+                    tracing::error!(err = ?e, "Failed in building fallback payload at slot {slot}");
+                };
+
+            },
+            Some(FetchPayloadRequest { slot, response_tx }) = payload_rx.recv() => {
+                tracing::info!(slot, "Received local payload request");
+
+                let Some(payload_and_bid) = fallback_builder.get_cached_payload() else  {
+                        tracing::warn!("No local payload found for {slot}");
+                        let _ = response_tx.send(None);
+                        continue;
+                };
+
+                if let Err(e) = response_tx.send(Some(payload_and_bid)) {
+                    tracing::error!(err = ?e, "Failed to send payload and bid in response channel");
+                } else {
+                    tracing::debug!("Sent payload and bid to response channel");
+                }
             },
             Ok(HeadEvent { slot, .. }) = head_event_listener.next_head() => {
                 tracing::info!(slot, "Got received a new head event");

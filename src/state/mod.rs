@@ -10,11 +10,11 @@ use alloy::rpc::types::beacon::events::HeadEvent;
 use beacon_api_client::Topic;
 use futures::StreamExt;
 use tokio::{sync::broadcast, task::AbortHandle};
-
+use reth_primitives::{ PooledTransactionsElement, TransactionSigned };
 use futures::{future::poll_fn, Future, FutureExt};
 use tokio::time::Sleep;
 
-use ethereum_consensus::{deneb::BeaconBlockHeader, phase0::mainnet::SLOTS_PER_EPOCH};
+use ethereum_consensus::{deneb:: { BeaconBlockHeader, mainnet::{Blob, BlobsBundle} }, crypto::{KzgCommitment, KzgProof}, phase0::mainnet::SLOTS_PER_EPOCH};
 
 use crate::constraints::SignedConstraints;
 use crate::commitment::request::PreconfRequest;
@@ -162,9 +162,63 @@ impl Block {
   pub fn add_constraints ( &mut self, constraints: SignedConstraints) {
     self.signed_constraints_list.push(constraints);
   }
+  
   pub fn remove_constraints( &mut self, slot: u64){
     self.signed_constraints_list.remove(slot.try_into().unwrap());
   }
+  
+  pub fn get_transactions(&self) -> Vec<PooledTransactionsElement> {
+    self.signed_constraints_list
+        .iter()
+        .flat_map(|sc| sc.message.constraints.iter().map(|c| c.transaction.clone()))
+        .collect()
+  }
+  
+  pub fn convert_constraints_to_transactions(&self) -> Vec<TransactionSigned> {
+    self.signed_constraints_list
+        .iter()
+        .flat_map(|sc| {
+            sc.message
+                .constraints
+                .iter()
+                .map(|c| c.transaction.clone().into_transaction())
+        })
+        .collect()
+ }
+
+ pub fn parse_to_blobs_bundle(&self) -> BlobsBundle {
+    let (commitments, proofs, blobs) =
+        self.signed_constraints_list
+            .iter()
+            .flat_map(|sc| sc.message.constraints.iter())
+            .filter_map(|c| match &c.transaction {
+                PooledTransactionsElement::BlobTransaction(blob_tx) => Some(&blob_tx.sidecar),
+                _ => None,
+            })
+            .fold(
+                (Vec::new(), Vec::new(), Vec::new()),
+                |(mut commitments, mut proofs, mut blobs), bs| {
+                    commitments.extend(bs.commitments.iter().map(|c| {
+                        KzgCommitment::try_from(c.as_slice()).expect("both are 48 bytes")
+                    }));
+                    proofs.extend(
+                        bs.proofs.iter().map(|p| {
+                            KzgProof::try_from(p.as_slice()).expect("both are 48 bytes")
+                        }),
+                    );
+                    blobs.extend(bs.blobs.iter().map(|b| {
+                        Blob::try_from(b.as_slice()).expect("both are 131_072 bytes")
+                    }));
+                    (commitments, proofs, blobs)
+                },
+            );
+
+    BlobsBundle {
+        commitments,
+        proofs,
+        blobs,
+    }
+ }
 }
 
 

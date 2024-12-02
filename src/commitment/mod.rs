@@ -15,25 +15,18 @@ pub async fn run_commitment_rpc_server ( event_sender: mpsc::Sender<CommitmentRe
   let app = Router::new()
   .route("/api/v1/preconfirmation", post(handle_preconfirmation))
   .with_state(handler.clone());
-
-  // let (close_tx, close_rx) = oneshot::channel();
   
   let addr: SocketAddr = SocketAddr::from(([0,0,0,0], config.commitment_port));
   let listener = tokio::net::TcpListener::bind(addr)
   .await
   .unwrap();
 
-  let server_handle = tokio::spawn(async {
+  tokio::spawn(async {
     axum::serve(listener, app)
         .await
         .unwrap();
   });
   tracing::info!("commitment RPC server is listening on .. {}", addr);
-  // tracing::info!("telling server to shutdown");
-  // _ = close_tx.send(());
-
-  // println!("waiting for server to gracefully shutdown");
-  // _ = server_handle.await;
 }
 
 #[debug_handler]

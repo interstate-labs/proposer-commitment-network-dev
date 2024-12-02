@@ -3,7 +3,9 @@ use std::{collections::HashMap, net::SocketAddr, str::FromStr, sync::Arc};
 use alloy::{hex, primitives::{keccak256, Address, FixedBytes}};
 use axum::{Router, extract::{Path, State}, response::Html, routing::{ get, post }, Json};
 use builder::{GetHeaderParams, GetPayloadResponse, SignedBuilderBid};
+
 use reth_primitives::PooledTransactionsElement;
+
 use ethereum_consensus::{ builder::SignedValidatorRegistration, deneb::mainnet::SignedBlindedBeaconBlock, Fork,};
 
 use serde::{Deserialize, Serialize};
@@ -14,6 +16,12 @@ use crate::{commitment::{request::{serialize_tx, PreconfRequest}}, errors::{Comm
 use crate::config::Config;
 
 mod builder;
+mod block_builder;
+mod signature;
+mod constraints_proxy_server;
+
+pub use builder::FallbackBuilder;
+pub use constraints_proxy_server::{run_constraints_proxy_server, FallbackPayloadFetcher, FetchPayloadRequest};
 
 /// The path to the builder API status endpoint.
 pub const STATUS_PATH: &str = "/eth/v1/builder/status";

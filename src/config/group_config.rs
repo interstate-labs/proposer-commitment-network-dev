@@ -1,10 +1,17 @@
 use std::{time::Duration, str::FromStr};
-  
+use alloy::primitives::b256;
 /// Default slot time duration in seconds.
 pub const DEFAULT_SLOT_TIME_SECONDS: u64 = 12;
 
 /// Default commitment deadline duration.
 pub const DEFAULT_COMMITMENT_DEADLINE_MILLIS: u64 = 8_000;
+
+pub const HOLEKSY_CHAIN_ID:u64 = 17000;
+pub const KURTOSIS_CHAIN_ID:u64 = 3151908;
+
+/// Builder domain for signing messages on Holesky and Kurtosis.
+const BUILDER_DOMAIN_HOLESKY: [u8; 32] = b256!("000000015b83a23759c560b2d0c64576e1dcfc34ea94c4988f3e0d9f77f05387").0;
+const BUILDER_DOMAIN_KURTOSIS: [u8; 32] = b256!("000000010b41be4cdb34d183dddca5398337626dcdcfaf1720c1202d3b95f84e").0;
 
 /// Chain configration
 #[derive(Debug, Clone)]
@@ -15,6 +22,9 @@ pub struct ChainConfig {
     pub commitment_deadline: u64,
     /// customized slot time
     pub slot_time: u64,
+    /// chain id
+    pub id: u64,
+
 }
 
 impl Default for ChainConfig {
@@ -23,6 +33,7 @@ impl Default for ChainConfig {
             chain: Chain::Holesky,
             commitment_deadline: DEFAULT_COMMITMENT_DEADLINE_MILLIS,
             slot_time: DEFAULT_SLOT_TIME_SECONDS,
+            id: HOLEKSY_CHAIN_ID
         }
     }
 }
@@ -40,6 +51,24 @@ impl ChainConfig {
     pub fn get_commitment_deadline_duration(&self) -> Duration {
         Duration::from_millis(self.commitment_deadline)
     }
+
+    pub fn get_chain_id(&self) -> u64 {
+        self.id
+    }
+
+    pub fn get_slot_time_in_seconds(&self) -> u64 {
+        self.slot_time
+    }
+
+    /// Get the domain for signing messages on the given chain.
+    pub fn builder_domain(&self) -> [u8; 32] {
+        match self.chain {
+            Chain::Holesky => BUILDER_DOMAIN_HOLESKY,
+            Chain::Kurtosis => BUILDER_DOMAIN_KURTOSIS,
+        }
+    }
+
+    
 }
 
 #[derive(Debug, Clone, Default)]
