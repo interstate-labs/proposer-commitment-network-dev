@@ -84,7 +84,7 @@ impl<P> ConstraintsAPIProxyServer<P> where P: PayloadFetcher + Send + Sync, {
           let mut fallback_payload = server.fallback_payload.lock();
           *fallback_payload = None;
 
-          tracing::debug!("got valid proofs of header");
+          tracing::debug!(?header, "got valid proofs of header");
           return Ok(Json(header));
         },
         Err(err) => {
