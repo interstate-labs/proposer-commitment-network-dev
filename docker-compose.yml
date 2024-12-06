@@ -7,7 +7,7 @@ services:
       - "8000:9061" # Interstate RPC port (this should be opened on your firewall!)
       - "18551:9062"
     volumes: 
-      - .env:/work/proposer-commitment-network/.env:ro
+      - .env:/work/interstate-protocol/proposer-commitment-network/.env:ro
 volumes:
   prometheus-data:
     driver: local

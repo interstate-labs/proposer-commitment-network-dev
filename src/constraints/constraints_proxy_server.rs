@@ -16,7 +16,7 @@ pub async fn run_constraints_proxy_server<P>(
 ) -> eyre::Result<CommitBoostApi>
 where P: PayloadFetcher + Send + Sync + 'static,
 {    //TODO: replace commit-boost url
-    let commit_boost_api: CommitBoostApi = CommitBoostApi::new(config.commit_boost_url.clone());
+    let commit_boost_api: CommitBoostApi = CommitBoostApi::new(config.collector_url.clone());
     let proxy_server = Arc::new(ConstraintsAPIProxyServer::new(commit_boost_api, fallback_payload_fetcher));
 
     let router = Router::new()
@@ -41,7 +41,7 @@ where P: PayloadFetcher + Send + Sync + 'static,
 
     tracing::info!("commit boost server is listening on .. {}", addr);
 
-    Ok(CommitBoostApi::new(config.commit_boost_url.clone()))
+    Ok(CommitBoostApi::new(config.collector_url.clone()))
 
 }
 
@@ -121,6 +121,15 @@ impl<P> ConstraintsAPIProxyServer<P> where P: PayloadFetcher + Send + Sync, {
   async fn get_payload( State(server): State<Arc<ConstraintsAPIProxyServer<P>>>, Json(signed_blinded_block):Json<SignedBlindedBeaconBlock>) -> Result<Json<GetPayloadResponse>, CommitBoostError> {
     tracing::debug!("handling GET_PAYLOAD request");
 
+    // If we have a locally built payload, it means we signed a local header.
+    // Return it and clear the cache.
+    if let Some(local_payload) = server.fallback_payload.lock().take() {
+        check_locally_built_payload_integrity(&signed_blinded_block, &local_payload)?;
+
+        tracing::debug!("Valid local block found, returning: {local_payload:?}");
+        return Ok(Json(local_payload));
+    }
+
     match server.proxier
             .get_payload(signed_blinded_block)
             .await
@@ -199,4 +208,146 @@ impl PayloadFetcher for NoopPayloadFetcher {
         tracing::info!(slot, "Fetch payload called");
         None
     }
+}
+
+
+#[derive(thiserror::Error, Debug, Clone)]
+pub enum LocalPayloadIntegrityError {
+    #[error(
+        "Locally built payload does not match signed header. 
+        {field_name} mismatch: expected {expected}, have {have}"
+    )]
+    FieldMismatch {
+        field_name: String,
+        expected: String,
+        have: String,
+    },
+}
+
+/// Helper macro to compare fields of the signed header and the local block.
+macro_rules! assert_payload_fields_eq {
+    ($expected:expr, $have:expr, $field_name:ident) => {
+        if $expected != $have {
+            tracing::error!(
+                field_name = stringify!($field_name),
+                expected = %$expected,
+                have = %$have,
+                "Local block does not match signed header"
+            );
+            return Err(LocalPayloadIntegrityError::FieldMismatch {
+                field_name: stringify!($field_name).to_string(),
+                expected: $expected.to_string(),
+                have: $have.to_string(),
+            });
+        }
+    };
+}
+
+
+fn check_locally_built_payload_integrity(
+    signed_blinded_block: &SignedBlindedBeaconBlock,
+    local_payload: &GetPayloadResponse,
+) -> Result<(), LocalPayloadIntegrityError> {
+    let header_signed_by_cl = &signed_blinded_block.message.body.execution_payload_header;
+    let local_execution_payload = local_payload.execution_payload();
+
+    assert_payload_fields_eq!(
+        &header_signed_by_cl.block_hash,
+        local_execution_payload.block_hash(),
+        BlockHash
+    );
+
+    assert_payload_fields_eq!(
+        header_signed_by_cl.block_number,
+        local_execution_payload.block_number(),
+        BlockNumber
+    );
+
+    assert_payload_fields_eq!(
+        &header_signed_by_cl.state_root,
+        local_execution_payload.state_root(),
+        StateRoot
+    );
+
+    assert_payload_fields_eq!(
+        &header_signed_by_cl.receipts_root,
+        local_execution_payload.receipts_root(),
+        ReceiptsRoot
+    );
+
+    assert_payload_fields_eq!(
+        &header_signed_by_cl.prev_randao,
+        local_execution_payload.prev_randao(),
+        PrevRandao
+    );
+
+    assert_payload_fields_eq!(
+        &header_signed_by_cl.gas_limit,
+        &local_execution_payload.gas_limit(),
+        GasLimit
+    );
+
+    assert_payload_fields_eq!(
+        &header_signed_by_cl.gas_used,
+        &local_execution_payload.gas_used(),
+        GasUsed
+    );
+
+    assert_payload_fields_eq!(
+        &header_signed_by_cl.timestamp,
+        &local_execution_payload.timestamp(),
+        Timestamp
+    );
+
+    assert_payload_fields_eq!(
+        &header_signed_by_cl.extra_data,
+        local_execution_payload.extra_data(),
+        ExtraData
+    );
+
+    assert_payload_fields_eq!(
+        &header_signed_by_cl.base_fee_per_gas,
+        local_execution_payload.base_fee_per_gas(),
+        BaseFeePerGas
+    );
+
+    assert_payload_fields_eq!(
+        &header_signed_by_cl.parent_hash,
+        local_execution_payload.parent_hash(),
+        ParentHash
+    );
+
+    assert_payload_fields_eq!(
+        &header_signed_by_cl.fee_recipient,
+        local_execution_payload.fee_recipient(),
+        FeeRecipient
+    );
+
+    assert_payload_fields_eq!(
+        &header_signed_by_cl.logs_bloom,
+        local_execution_payload.logs_bloom(),
+        LogsBloom
+    );
+
+    assert_payload_fields_eq!(
+        &header_signed_by_cl.blob_gas_used,
+        &local_execution_payload.blob_gas_used().unwrap_or_default(),
+        BlobGasUsed
+    );
+
+    assert_payload_fields_eq!(
+        &header_signed_by_cl.excess_blob_gas,
+        &local_execution_payload
+            .excess_blob_gas()
+            .unwrap_or_default(),
+        ExcessBlobGas
+    );
+
+    // TODO: Sanity check: recalculate transactions and withdrawals roots
+    // and assert them against the header
+
+    // TODO: Sanity check: verify the validator signature
+    // signed_blinded_block.verify_signature()?;
+
+    Ok(())
 }

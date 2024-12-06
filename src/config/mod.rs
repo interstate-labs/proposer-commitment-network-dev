@@ -23,8 +23,10 @@ pub struct Config {
     pub commitment_port: u16,
     /// The builder server port to listen on (handling constraints apis)
     pub builder_port: u16,
-    /// URL for the MEV-Boost sidecar client to use
-    pub commit_boost_url: Url,
+    /// The constraints collector url
+    pub collector_url: Url,
+    /// The constraints collector websocket url
+    pub collector_ws: String,
     /// URL for the beacon client API URL
     pub beacon_api_url: Url,
     /// The execution API url
@@ -48,7 +50,7 @@ impl Default for Config {
         Self {
             commitment_port: DEFAULT_COMMITMENT_PORT,
             builder_port: DEFAULT_MEV_BOOST_PROXY_PORT,
-            commit_boost_url: "http://localhost:3030".parse().expect("Valid URL"),
+            collector_url: "http://localhost:3030".parse().expect("Valid URL"),
             beacon_api_url: "http://localhost:5052".parse().expect("Valid URL"),
             execution_api_url: "http://localhost:8545".parse().expect("Valid URL"),
             engine_api_url: "http://localhost:8551".parse().expect("Valid URL"),
@@ -57,13 +59,14 @@ impl Default for Config {
             jwt_hex: String::new(),
             fee_recipient: Address::ZERO,
             builder_bls_private_key: random_bls_secret(),
+            collector_ws: String::new()
         }
     }
 }
 
 impl Config {
     pub fn new(envs: HashMap<String, String>) -> Self {
-        // ,&envs["BUILDER_PORT"],&envs["COMMIT_BOOST_URL"],&envs["BEACON_API_URL"], &envs["PRIVATE_KEY"], &envs["JWT_HEX"], &envs["VALIDATOR_INDEXES"], , &envs["COMMITMENT_DEADLINE"], &envs["SLOT_TIME"]
+        // ,&envs["BUILDER_PORT"],&envs["collector_url"],&envs["BEACON_API_URL"], &envs["PRIVATE_KEY"], &envs["JWT_HEX"], &envs["VALIDATOR_INDEXES"], , &envs["COMMITMENT_DEADLINE"], &envs["SLOT_TIME"]
         let validators = ValidatorIndexes::from_str(&envs["VALIDATOR_INDEXES"].as_str()).unwrap();
 
         let chain = ChainConfig {
@@ -84,7 +87,8 @@ impl Config {
         Self {
             commitment_port: envs["COMMITMENT_PORT"].parse().unwrap(),
             builder_port: envs["BUILDER_PORT"].parse().unwrap(),
-            commit_boost_url: envs["COMMIT_BOOST_URL"].parse().expect("Valid URL"),
+            collector_url: envs["COLLECTOR_URL"].parse().expect("Valid URL"),
+            collector_ws:envs["COLLECTOR_SOCKET"].parse().expect("Valid URL"),
             beacon_api_url: envs["BEACON_API_URL"].parse().expect("Valid URL"),
             execution_api_url: envs["EXECUTION_API_URL"].parse().expect("Valid URL"),
             engine_api_url: envs["ENGINE_API_URL"].parse().expect("Valid URL"),

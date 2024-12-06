@@ -80,6 +80,20 @@ impl ConstraintState {
     }
   }
 
+  pub fn replace_constraints(&mut self, slot: u64, signed_constraints: &Vec<SignedConstraints>) {
+    tracing::debug!("here is replace constraints function");
+    if let Some(block) = self.blocks.get_mut(&slot) {
+        tracing::debug!("current constraints {}", block.signed_constraints_list.len()); 
+        block.replace_constraints(signed_constraints);
+        tracing::debug!("replaced constraints {}", block.signed_constraints_list.len());
+    } else {
+        let mut block = Block::default();
+        block.replace_constraints(signed_constraints);
+        self.blocks.insert(slot, block.clone());
+        tracing::debug!("replaced constraints {}", block.signed_constraints_list.len());
+    }
+  }
+
   pub fn remove_constraints_at_slot( &mut self, slot: u64) -> Option<Block> {
     self.blocks.remove(&slot)
   }
@@ -153,7 +167,7 @@ impl ConstraintState {
 }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct  Block {
   pub signed_constraints_list: Vec<SignedConstraints>
 }
@@ -161,6 +175,10 @@ pub struct  Block {
 impl Block {
   pub fn add_constraints ( &mut self, constraints: SignedConstraints) {
     self.signed_constraints_list.push(constraints);
+  }
+
+  pub fn replace_constraints ( &mut self, constraints: &Vec<SignedConstraints>) {
+    self.signed_constraints_list = constraints.clone();
   }
   
   pub fn remove_constraints( &mut self, slot: u64){
