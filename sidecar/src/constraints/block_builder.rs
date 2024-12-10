@@ -562,3 +562,66 @@ pub(crate) fn to_bytes20(value: Address) -> spec::ExecutionAddress {
 pub(crate) fn to_byte_vector(value: Bloom) -> ByteVector<256> {
     ByteVector::<256>::try_from(value.as_ref()).unwrap()
 }
+
+#[cfg(test)]
+mod tests {
+    use alloy::{
+        eips::eip2718::Encodable2718,
+        network::{EthereumWallet, TransactionBuilder},
+        primitives::{hex, Address},
+        signers::k256::ecdsa::SigningKey,
+        signers::local::PrivateKeySigner,
+    };
+    use reth_primitives::PooledTransactionsElement;
+    use crate::utils::create_random_bls_secretkey;    
+    use crate::{
+        commitment::request::PreconfRequest, constraints::{builder::FallbackBuilder, ConstraintsMessage, SignedConstraints}, state::Block, test_utils::{default_test_transaction, get_test_config}, BLSBytes, BLS_DST_PREFIX
+    };
+
+    #[tokio::test]
+    async fn test_build_fallback_payload() -> eyre::Result<()> {
+        let _ = tracing_subscriber::fmt::try_init();
+
+        let cfg = get_test_config();
+
+        let raw_sk = "5d2344259f42259f82d2c140aa66102ba89b57b4883ee441a8b312622bd42491".to_string();
+        let sk = SigningKey::from_slice(hex::decode(raw_sk)?.as_slice())?;
+        let signer = PrivateKeySigner::from_signing_key(sk.clone());
+        let wallet = EthereumWallet::from(signer);
+
+        let addy = Address::from_private_key(&sk);
+        let tx = default_test_transaction(addy, Some(1)).with_chain_id(1);
+        let tx_signed = tx.build(&wallet).await?;
+        let raw_encoded = tx_signed.encoded_2718();
+
+        let tx = PooledTransactionsElement::decode_enveloped(&mut raw_encoded.as_slice())?;
+
+        let request = PreconfRequest {
+            tx,
+            sender:addy,
+            slot: 42,
+        };
+
+        let message = ConstraintsMessage::build(7, request);
+
+        let signer_key = create_random_bls_secretkey();
+        let signature =  BLSBytes::from(signer_key.sign(&message.digest(), BLS_DST_PREFIX, &[]).to_bytes());
+        let signed_constraints = SignedConstraints { message, signature };
+
+        let mut block = Block::default();
+       
+        block.add_constraints(signed_constraints);
+        
+        assert_eq!(block.signed_constraints_list.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_empty_el_withdrawals_root() {
+        // Withdrawal root in the execution layer header is MPT.
+        assert_eq!(
+            reth_primitives::proofs::calculate_withdrawals_root(&Vec::new()),
+            reth_primitives::constants::EMPTY_WITHDRAWALS
+        );
+    }
+}

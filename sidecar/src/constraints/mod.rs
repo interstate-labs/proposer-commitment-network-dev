@@ -388,3 +388,51 @@ async fn register_validators( State(api):State<Arc<CommitBoostApi>>, Json(regist
     tracing::debug!("handling REGISTER_VALIDATORS_REQUEST");
     api.register_validators(registors).await.map(|_| StatusCode::OK)
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use reth_primitives::PooledTransactionsElement;
+    use crate::test_utils::{default_test_transaction, get_test_config};
+    use alloy::{
+        eips::eip2718::Encodable2718,
+        network::{EthereumWallet, TransactionBuilder},
+        primitives::{hex, Address, keccak256},
+        signers::k256::ecdsa::SigningKey,
+        signers::local::PrivateKeySigner,
+    };
+    use reth_primitives::TransactionSigned;
+    #[derive(Debug, Clone, PartialEq)]
+    struct MockTransaction {
+        data: Vec<u8>,
+    }
+
+    #[tokio::test]
+    async fn test_constraints_message_build() -> eyre::Result<()>  {
+        let raw_sk = "5d2344259f42259f82d2c140aa66102ba89b57b4883ee441a8b312622bd42491".to_string();
+        let sk = SigningKey::from_slice(hex::decode(raw_sk)?.as_slice())?;
+        let signer = PrivateKeySigner::from_signing_key(sk.clone());
+        let wallet = EthereumWallet::from(signer);
+
+        let addy = Address::from_private_key(&sk);
+        let tx = default_test_transaction(addy.clone(), Some(1)).with_chain_id(1);
+        let tx_signed = tx.build(&wallet).await?;
+        let  raw_encoded = tx_signed.encoded_2718();
+        let mut raw = raw_encoded.as_slice();
+
+        let tx = PooledTransactionsElement::decode_enveloped(&mut raw)?;
+
+        let request = PreconfRequest {
+            tx,
+            sender:addy,
+            slot: 42,
+        };
+
+        let message = ConstraintsMessage::build(7, request);
+
+        assert_eq!(message.constraints[0].sender, addy);
+
+        Ok(())
+    }
+}

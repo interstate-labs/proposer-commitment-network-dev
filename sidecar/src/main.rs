@@ -8,6 +8,7 @@ use tokio_tungstenite::{connect_async, tungstenite::client::IntoClientRequest};
 use commitment::request::CommitmentRequestEvent;
 use tracing_subscriber::fmt::Subscriber;
 use blst::min_pk::SecretKey;
+use utils::create_random_bls_secretkey;
 use std::{collections::HashMap, sync::Arc};
 pub use beacon_api_client::mainnet::Client;
 
@@ -22,12 +23,14 @@ mod state;
 mod constraints;
 mod errors;
 mod config;
+mod test_utils;
+mod utils;
 
 pub type BLSBytes = FixedBytes<96>;
+pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
 #[tokio::main]
 async fn main() {
-    pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
     let subscriber = Subscriber::builder()
     .with_max_level(tracing::Level::DEBUG)
@@ -53,10 +56,8 @@ async fn main() {
     // let mut constraint_state = Arc::new(RwLock::new(ConstraintState::new( beacon_client.clone(), config.validator_indexes.clone(), config.chain.get_commitment_deadline_duration()))) ;
     let mut constraint_state = ConstraintState::new( beacon_client.clone(), config.validator_indexes.clone(), config.chain.get_commitment_deadline_duration()) ;
 
-    let mut rng = rand::thread_rng();
-    let mut ikm = [0u8; 32];
-    rng.fill_bytes(&mut ikm);
-    let signer_key = SecretKey::key_gen(&ikm, &[]).unwrap();
+   
+    let signer_key = create_random_bls_secretkey();
 
     let mut head_event_listener = HeadEventListener::run(beacon_client);
 
