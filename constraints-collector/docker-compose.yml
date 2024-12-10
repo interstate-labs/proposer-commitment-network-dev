@@ -1,0 +1,14 @@
+services:
+  interstate-constraints-collector:
+    image: whereasjovially/interstate-constraints-collector:0.0.1-dev
+    container_name: interstate-constraints-collector
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    volumes: 
+      - .env:/work/interstate-protocol/constraints-collector/.env:ro
+volumes:
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
