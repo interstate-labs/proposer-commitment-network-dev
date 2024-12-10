@@ -3,6 +3,10 @@
 ![Multiparty Preconfirmation Flow](static/multipartypreconf.png)
 Interstate's design allows multiple preconfirmations to run on the same sidecar. This design promotes decentralization: https://docs.interstate.so/research/multiparty-preconf. 
 
+## How it works
+![Interstate protocol sequence chart](static/interstate-sequence.png)
+
+
 ## How to install
 `
 git clone https://github.com/interstate-labs/proposer-commitment-network.git
