@@ -305,6 +305,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "alloy-node-bindings"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16faebb9ea31a244fd6ce3288d47df4be96797d9c3c020144b8f2c31543a4512"
+dependencies = [
+ "alloy-genesis",
+ "alloy-primitives 0.7.7",
+ "k256 0.13.4",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "alloy-primitives"
 version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3095,6 +3111,7 @@ name = "interstate-boost"
 version = "0.1.0"
 dependencies = [
  "alloy",
+ "alloy-node-bindings",
  "async-trait",
  "axum",
  "axum-server",

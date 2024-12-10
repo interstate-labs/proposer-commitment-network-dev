@@ -36,3 +36,6 @@ rand = "0.8.5"
 env-file-reader = "0.3.0"
 regex = "1.10.5"
 tokio-tungstenite = "0.24.0"
+
+[dev-dependencies]
+alloy-node-bindings = "0.2.0"  

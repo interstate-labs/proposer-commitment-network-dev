@@ -22,7 +22,6 @@ mod state;
 mod constraints;
 mod errors;
 mod config;
-mod utils;
 
 pub type BLSBytes = FixedBytes<96>;
 
