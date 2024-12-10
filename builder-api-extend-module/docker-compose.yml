@@ -1,0 +1,14 @@
+services:
+  interstate-extender:
+    image: whereasjovially/interstate-extender:0.0.1-dev
+    container_name: interstate-extender
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes: 
+      - .env:/work/interstate-protocol/builder-api-extend-module/.env:ro
+volumes:
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
