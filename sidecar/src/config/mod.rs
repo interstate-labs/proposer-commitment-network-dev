@@ -108,3 +108,82 @@ pub fn random_bls_secret() -> BLSSecretKey {
     rng.fill_bytes(&mut ikm);
     BLSSecretKey::key_gen(&ikm, &[]).unwrap()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use reth_primitives::Address;
+
+    #[test]
+    fn test_config_default() {
+        let default_config = Config::default();
+
+        assert_eq!(default_config.commitment_port, DEFAULT_COMMITMENT_PORT);
+        assert_eq!(default_config.builder_port, DEFAULT_MEV_BOOST_PROXY_PORT);
+        assert_eq!(
+            default_config.collector_url.as_str(),
+            "http://localhost:3030/"
+        );
+        assert_eq!(
+            default_config.beacon_api_url.as_str(),
+            "http://localhost:5052/"
+        );
+        assert_eq!(
+            default_config.execution_api_url.as_str(),
+            "http://localhost:8545/"
+        );
+        assert_eq!(
+            default_config.engine_api_url.as_str(),
+            "http://localhost:8551/"
+        );
+        assert!(default_config.jwt_hex.is_empty());
+        assert_eq!(default_config.fee_recipient, Address::ZERO);
+        assert!(default_config.collector_ws.is_empty());
+    }
+
+    #[test]
+    fn test_config_new() {
+        let mut envs = HashMap::new();
+        envs.insert("COMMITMENT_PORT".to_string(), "8001".to_string());
+        envs.insert("BUILDER_PORT".to_string(), "18552".to_string());
+        envs.insert("COLLECTOR_URL".to_string(), "http://localhost:4000".to_string());
+        envs.insert("COLLECTOR_SOCKET".to_string(), "ws://localhost:4001".to_string());
+        envs.insert("BEACON_API_URL".to_string(), "http://localhost:6000".to_string());
+        envs.insert("EXECUTION_API_URL".to_string(), "http://localhost:7000".to_string());
+        envs.insert("ENGINE_API_URL".to_string(), "http://localhost:8000".to_string());
+        envs.insert("VALIDATOR_INDEXES".to_string(), "0,1,2".to_string());
+        envs.insert("CHAIN".to_string(), "kurtosis".to_string());
+        envs.insert("COMMITMENT_DEADLINE".to_string(), "12".to_string());
+        envs.insert("SLOT_TIME".to_string(), "10".to_string());
+        envs.insert("JWT".to_string(), "test-jwt".to_string());
+        envs.insert("FEE_RECIPIENT".to_string(), "0x0000000000000000000000000000000000000001".to_string());
+
+        let config = Config::new(envs);
+
+        assert_eq!(config.commitment_port, 8001);
+        assert_eq!(config.builder_port, 18552);
+        assert_eq!(config.collector_url.as_str(), "http://localhost:4000/");
+        assert_eq!(config.collector_ws, "ws://localhost:4001");
+        assert_eq!(config.beacon_api_url.as_str(), "http://localhost:6000/");
+        assert_eq!(config.execution_api_url.as_str(), "http://localhost:7000/");
+        assert_eq!(config.engine_api_url.as_str(), "http://localhost:8000/");
+        assert_eq!(config.jwt_hex, "test-jwt");
+        assert_eq!(
+            config.fee_recipient,
+            Address::parse_checksummed("0x0000000000000000000000000000000000000001", None).unwrap()
+        );
+
+        assert_eq!(config.chain.id, KURTOSIS_CHAIN_ID);
+        assert_eq!(config.chain.commitment_deadline, 12);
+        assert_eq!(config.chain.slot_time, 10);
+    }
+
+    #[test]
+    fn test_random_bls_secret() {
+        let key1 = random_bls_secret();
+        let key2 = random_bls_secret();
+
+        assert_ne!(key1.to_bytes(), key2.to_bytes(), "Keys should be random and unique");
+    }
+}
