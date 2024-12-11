@@ -1,7 +1,7 @@
 # Interstate sidecar to send preconfirmation requests to commit-boost.
 
 ![Multiparty Preconfirmation Flow](static/multipartypreconf.png)
-Interstate's design allows multiple preconfirmations to run on the same sidecar. This design promotes decentralization: https://docs.interstate.so/research/multiparty-preconf. 
+Interstate's design allows multiple preconfirmations sidecars to run on the same validator. This design promotes decentralization: https://docs.interstate.so/research/multiparty-preconf. 
 
 ## How it works
 ![Interstate protocol sequence chart](static/interstate-sequence.png)
