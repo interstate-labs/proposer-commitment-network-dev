@@ -46,6 +46,25 @@ pub enum Chain {
     Kurtosis,
 }
 
+impl Chain {
+    // get chain name as str
+    pub fn get_name(&self) -> &'static str {
+        match self {
+            Chain::Holesky => "mainnet",
+            Chain::Kurtosis => "kurtosis"
+        }
+    }
+
+    // get fork version of chain 
+    pub fn get_fork_version(&self) -> [u8; 4] {
+        match self {
+            Chain::Holesky => [1, 1, 112, 0],
+            Chain::Kurtosis => [16, 0, 0, 56],
+        }
+    }
+    
+}
+
 impl ChainConfig {
     /// get duration of commitment deadline.
     pub fn get_commitment_deadline_duration(&self) -> Duration {
