@@ -1,5 +1,6 @@
 use std::{time::Duration, str::FromStr};
 use alloy::primitives::b256;
+use ethereum_consensus::deneb::{compute_fork_data_root, Root};
 /// Default slot time duration in seconds.
 pub const DEFAULT_SLOT_TIME_SECONDS: u64 = 12;
 
@@ -12,6 +13,9 @@ pub const KURTOSIS_CHAIN_ID:u64 = 3151908;
 /// Builder domain for signing messages on Holesky and Kurtosis.
 const BUILDER_DOMAIN_HOLESKY: [u8; 32] = b256!("000000015b83a23759c560b2d0c64576e1dcfc34ea94c4988f3e0d9f77f05387").0;
 const BUILDER_DOMAIN_KURTOSIS: [u8; 32] = b256!("000000010b41be4cdb34d183dddca5398337626dcdcfaf1720c1202d3b95f84e").0;
+
+/// The domain mask for signing commit-boost messages.
+pub const COMMIT_BOOST_DOMAIN_MASK: [u8; 4] = [109, 109, 111, 67];
 
 /// Chain configration
 #[derive(Debug, Clone)]
@@ -46,6 +50,24 @@ pub enum Chain {
     Kurtosis,
 }
 
+impl Chain {
+    /// Get the chain name for the given chain.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Chain::Holesky => "holesky",
+            Chain::Kurtosis => "kurtosis",
+        }
+    }
+
+    /// Get the fork version for the given chain.
+    pub fn fork_version(&self) -> [u8; 4] {
+        match self {
+            Chain::Holesky => [1, 1, 112, 0],
+            Chain::Kurtosis => [16, 0, 0, 56],
+        }
+    }
+}
+
 impl ChainConfig {
     /// get duration of commitment deadline.
     pub fn get_commitment_deadline_duration(&self) -> Duration {
@@ -68,6 +90,27 @@ impl ChainConfig {
         }
     }
 
+    /// Get the domain for signing commit-boost messages on the given chain.
+    pub fn commit_boost_domain(&self) -> [u8; 32] {
+        self.compute_domain_from_mask(COMMIT_BOOST_DOMAIN_MASK)
+    }
+
+    /// Compute the domain for signing messages on the given chain.
+    fn compute_domain_from_mask(&self, mask: [u8; 4]) -> [u8; 32] {
+        let mut domain = [0; 32];
+
+        let fork_version = self.chain.fork_version();
+
+        // Note: the application builder domain specs require the genesis_validators_root
+        // to be 0x00 for any out-of-protocol message. The commit-boost domain follows the
+        // same rule.
+        let root = Root::default();
+        let fork_data_root = compute_fork_data_root(fork_version, root).expect("valid fork data");
+
+        domain[..4].copy_from_slice(&mask);
+        domain[4..].copy_from_slice(&fork_data_root[..28]);
+        domain
+    }
     
 }
 

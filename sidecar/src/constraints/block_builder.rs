@@ -1,15 +1,32 @@
 use alloy::{
-  eips::{eip4895::Withdrawal,  BlockNumberOrTag, calc_excess_blob_gas, calc_next_block_base_fee, eip1559::BaseFeeParams }, hex::FromHex, primitives::{Address, Bytes, B256, U256, U64}, rpc::{
-      client::{ClientBuilder, RpcClient},
-  }, transports::{http::Http, TransportErrorKind, TransportResult},
-  rpc::types::{engine:: { ExecutionPayload as AlloyExecutionPayload, ExecutionPayloadV1, ExecutionPayloadV2,
-    ExecutionPayloadV3}, Block},
+    consensus::{Header, EMPTY_OMMER_ROOT_HASH},
+     eips::{
+        calc_excess_blob_gas, 
+        calc_next_block_base_fee, 
+        eip1559::BaseFeeParams, 
+        BlockNumberOrTag,
+        eip2718::Encodable2718, eip4895::Withdrawal
+    }, 
+    hex::FromHex, 
+    primitives::{
+        Address, Bloom, Bytes, B256, B64, U256
+    }, 
+    rpc::{
+        client::{ClientBuilder, RpcClient}, 
+        types::{
+            Block, 
+            Withdrawals,
+            engine::{
+                ExecutionPayload as AlloyExecutionPayload, ExecutionPayloadV1, ExecutionPayloadV2,
+                ExecutionPayloadV3,
+            },
+        },
+    }, 
+    transports::{http::Http, TransportResult}
 };
 
-use reth_primitives::{
-  constants::BEACON_NONCE, proofs, BlockBody, Bloom, Header, SealedBlock, TransactionSigned,
-  Withdrawals, EMPTY_OMMER_ROOT_HASH,
-};
+use reth_primitives::{proofs, BlockBody, SealedBlock, SealedHeader, TransactionSigned};
+
 
 use ethereum_consensus::{
     bellatrix::mainnet::Transaction,
@@ -76,7 +93,7 @@ impl BlockBuilder {
     let latest_block = self.el_rpc_client.get_block(None, true).await?;
     tracing::debug!("got latest block");
 
-    let withdrawals = self.beacon_rpc_client.get_expected_withdrawals(StateId::Head, None).await?.into_iter().map(convert_withdrawal_from_consensus_to_reth).collect::<Vec<_>>();
+    let withdrawals = self.beacon_rpc_client.get_expected_withdrawals(StateId::Head, None).await?.into_iter().map(convert_withdrawal_from_consensus_to_alloy).collect::<Vec<_>>();
     tracing::debug!("got withdrawals");
 
     let prev_randao = reqwest::Client::new()
@@ -100,10 +117,10 @@ impl BlockBuilder {
         let prev_randao = B256::from_hex(prev_randao).unwrap();
         tracing::debug!("got prev_randao");
         
-        let parent_beacon_block_root = self
+        let parent_beacon_block_root:B256 = B256::from_slice(&self
             .beacon_rpc_client
             .get_beacon_block_root(BlockId::Head)
-            .await?;
+            .await.unwrap().to_vec());
         tracing::debug!(parent = ?parent_beacon_block_root, "got parent_beacon_block_root");
 
         let versioned_hashes = txs
@@ -146,7 +163,6 @@ impl BlockBuilder {
             ommers: Vec::new(),
             transactions: txs.to_vec(),
             withdrawals: Some(Withdrawals::new(withdrawals)),
-            requests: None,
         };
 
         let mut hints = Hints::default();
@@ -156,7 +172,8 @@ impl BlockBuilder {
         loop {
             let header = build_header_with_hints_and_context(&latest_block, &hints, &ctx);
 
-            let sealed_header = header.seal_slow();
+            let sealed_hash = header.hash_slow();
+            let sealed_header = SealedHeader::new(header, sealed_hash);
             let sealed_block = SealedBlock::new(sealed_header, body.clone());
 
             let block_hash = hints.block_hash.unwrap_or(sealed_block.hash());
@@ -224,10 +241,10 @@ impl ExecutionRpcClient {
 }
 
 /// convert a withdrawal from ethereum-consensus to Reth
-pub(crate) fn convert_withdrawal_from_consensus_to_reth(
+pub(crate) fn convert_withdrawal_from_consensus_to_alloy(
   value: ethereum_consensus::capella::Withdrawal,
-) -> reth_primitives::Withdrawal {
-  reth_primitives::Withdrawal {
+) -> alloy::eips::eip4895::Withdrawal {
+    alloy::eips::eip4895::Withdrawal {
       index: value.index as u64,
       validator_index: value.validator_index as u64,
       address: Address::from_slice(value.address.as_ref()),
@@ -237,7 +254,7 @@ pub(crate) fn convert_withdrawal_from_consensus_to_reth(
 
 /// convert a withdrawal from Reth to ethereum-consensus
 pub(crate) fn convert_withdrawal_from_reth_to_consensus(
-    value: &reth_primitives::Withdrawal,
+    value: &alloy::eips::eip4895::Withdrawal,
 ) -> ethereum_consensus::capella::Withdrawal {
     ethereum_consensus::capella::Withdrawal {
         index: value.index as usize,
@@ -257,7 +274,7 @@ pub(crate) fn create_execution_payload_header(
     // Transactions and withdrawals are treated as opaque byte arrays in consensus types
     let transactions_bytes = transactions
         .iter()
-        .map(|t| t.envelope_encoded())
+        .map(|t| t.encoded_2718())
         .collect::<Vec<_>>();
 
     let mut transactions_ssz: List<Transaction, MAX_TRANSACTIONS_PER_PAYLOAD> = List::default();
@@ -273,7 +290,7 @@ pub(crate) fn create_execution_payload_header(
     let mut withdrawals_ssz: List<ConsensusWithdrawal, MAX_WITHDRAWALS_PER_PAYLOAD> =
         List::default();
 
-    if let Some(withdrawals) = sealed_block.withdrawals.as_ref() {
+    if let Some(withdrawals) = sealed_block.body.withdrawals.as_ref() {
         for w in withdrawals.iter() {
             withdrawals_ssz.push(convert_withdrawal_from_reth_to_consensus(w));
         }
@@ -311,7 +328,7 @@ pub(crate) fn create_alloy_execution_payload(
     block: &SealedBlock,
     block_hash: B256,
 ) -> AlloyExecutionPayload {
-    let alloy_withdrawals = block
+    let alloy_withdrawals = block.body
         .withdrawals
         .as_ref()
         .map(|withdrawals| {
@@ -356,11 +373,11 @@ pub(crate) fn create_alloy_execution_payload(
 pub(crate) fn create_consensus_execution_payload(value: &SealedBlock) -> ConsensusExecutionPayload {
     let hash = value.hash();
     let header = &value.header;
-    let transactions = &value.body;
-    let withdrawals = &value.withdrawals;
+    let transactions = &value.body.transactions;
+    let withdrawals = &value.body.withdrawals;
     let transactions = transactions
         .iter()
-        .map(|t| spec::Transaction::try_from(t.envelope_encoded().as_ref()).unwrap())
+        .map(|t| spec::Transaction::try_from(t.encoded_2718().as_ref()).unwrap())
         .collect::<Vec<_>>();
     let withdrawals = withdrawals
         .as_ref()
@@ -527,7 +544,7 @@ fn build_header_with_hints_and_context(
   let state_root = hints.state_root.unwrap_or_default();
 
   Header {
-      parent_hash: latest_block.header.hash.unwrap_or_default(),
+      parent_hash: latest_block.header.hash,
       ommers_hash: EMPTY_OMMER_ROOT_HASH,
       beneficiary: context.fee_recipient,
       state_root,
@@ -536,17 +553,17 @@ fn build_header_with_hints_and_context(
       withdrawals_root: Some(context.withdrawals_root),
       logs_bloom,
       difficulty: U256::ZERO,
-      number: latest_block.header.number.unwrap_or_default() + 1,
+      number: latest_block.header.number + 1,
       gas_limit: latest_block.header.gas_limit as u64,
       gas_used,
       timestamp: latest_block.header.timestamp + context.slot_time_in_seconds,
       mix_hash: context.prev_randao,
-      nonce: BEACON_NONCE,
+      nonce: B64::ZERO,
       base_fee_per_gas: Some(context.base_fee),
       blob_gas_used: Some(context.blob_gas_used),
       excess_blob_gas: Some(context.excess_blob_gas),
       parent_beacon_block_root: Some(context.parent_beacon_block_root),
-      requests_root: None,
+      requests_hash: None,
       extra_data: context.extra_data.clone(),
   }
 }
@@ -566,14 +583,12 @@ pub(crate) fn to_byte_vector(value: Bloom) -> ByteVector<256> {
 #[cfg(test)]
 mod tests {
     use alloy::{
-        eips::eip2718::Encodable2718,
-        network::{EthereumWallet, TransactionBuilder},
-        primitives::{hex, Address},
-        signers::k256::ecdsa::SigningKey,
-        signers::local::PrivateKeySigner,
+        eips::eip2718::Encodable2718, network::{EthereumWallet, TransactionBuilder}, primitives::{hex, Address}, signers::{k256::ecdsa::SigningKey, local::PrivateKeySigner}
     };
+
+    use ethereum_consensus::crypto::PublicKey as ECBlsPublicKey;
     use reth_primitives::PooledTransactionsElement;
-    use crate::utils::create_random_bls_secretkey;    
+    use crate::{constraints::Constraint, utils::create_random_bls_secretkey};    
     use crate::{
         commitment::request::PreconfRequest, constraints::{builder::FallbackBuilder, ConstraintsMessage, SignedConstraints}, state::Block, test_utils::{default_test_transaction, get_test_config}, BLSBytes, BLS_DST_PREFIX
     };
@@ -594,15 +609,19 @@ mod tests {
         let tx_signed = tx.build(&wallet).await?;
         let raw_encoded = tx_signed.encoded_2718();
 
-        let tx = PooledTransactionsElement::decode_enveloped(&mut raw_encoded.as_slice())?;
+        let tx = Constraint::decode_enveloped(&mut raw_encoded.as_slice())?;
 
         let request = PreconfRequest {
-            tx,
+            txs:vec![tx],
             sender:addy,
             slot: 42,
         };
 
-        let message = ConstraintsMessage::build(7, request);
+        // println!("preconf request {:#?}", request);
+
+        let validator_pubkey = ECBlsPublicKey::try_from(create_random_bls_secretkey().sk_to_pk().to_bytes().as_ref()).unwrap();
+
+        let message = ConstraintsMessage::build(validator_pubkey, request);
 
         let signer_key = create_random_bls_secretkey();
         let signature =  BLSBytes::from(signer_key.sign(&message.digest(), BLS_DST_PREFIX, &[]).to_bytes());
@@ -616,12 +635,4 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_empty_el_withdrawals_root() {
-        // Withdrawal root in the execution layer header is MPT.
-        assert_eq!(
-            reth_primitives::proofs::calculate_withdrawals_root(&Vec::new()),
-            reth_primitives::constants::EMPTY_WITHDRAWALS
-        );
-    }
 }

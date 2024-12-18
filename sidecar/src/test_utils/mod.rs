@@ -25,6 +25,8 @@ pub(crate) fn get_test_config() -> Config {
     envs.insert("SLOT_TIME".to_string(), "2".to_string());
     envs.insert("COMMITMENT_DEADLINE".to_string(), "100".to_string());
     envs.insert("FEE_RECIPIENT".to_string(), "0x8aC112a5540f441cC9beBcC647041A6E0D595B94".to_string());
+    envs.insert("KEYSTORE_SECRETS_PATH".to_string(), "/work/proposer-commitment-network/sidecar/keystores/secrets".to_string());
+    envs.insert("KEYSTORE_PUBKEYS_PATH".to_string(), "/work/proposer-commitment-network/sidecar/keystores/keys".to_string());
     
     Config::new(envs)
 }

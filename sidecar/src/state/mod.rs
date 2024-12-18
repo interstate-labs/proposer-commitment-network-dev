@@ -14,9 +14,9 @@ use reth_primitives::{ PooledTransactionsElement, TransactionSigned };
 use futures::{future::poll_fn, Future, FutureExt};
 use tokio::time::Sleep;
 
-use ethereum_consensus::{deneb:: { BeaconBlockHeader, mainnet::{Blob, BlobsBundle} }, crypto::{KzgCommitment, KzgProof}, phase0::mainnet::SLOTS_PER_EPOCH};
+use ethereum_consensus::{crypto::PublicKey as ECBlsPublicKey, deneb:: { BeaconBlockHeader, mainnet::{Blob, BlobsBundle} }, crypto::{KzgCommitment, KzgProof}, phase0::mainnet::SLOTS_PER_EPOCH};
 
-use crate::constraints::SignedConstraints;
+use crate::constraints::{SignedConstraints, TransactionExt};
 use crate::commitment::request::PreconfRequest;
 use crate::config::ValidatorIndexes;
 
@@ -98,7 +98,7 @@ impl ConstraintState {
     self.blocks.remove(&slot)
   }
 
-  pub fn validate_preconf_request(&self, request: &PreconfRequest) -> Result<u64, StateError> {
+  pub fn validate_preconf_request(&self, request: &PreconfRequest) -> Result<ECBlsPublicKey, StateError> {
   
     // Check if the slot is in the current epoch
     if request.slot < self.current_epoch.start_slot || request.slot >= self.current_epoch.start_slot + SLOTS_PER_EPOCH {
@@ -112,20 +112,20 @@ impl ConstraintState {
         return Err(StateError::DeadlineExpired);
     }
 
-    // Find the validator index for the given slot
-    let validator_index = self.find_validator_index_for_slot(request.slot)?;
+    // Find the validator publickey for the given slot
+    let public_key = self.find_validator_pubkey_for_slot(request.slot)?;
 
-    Ok(validator_index)
+    Ok(public_key)
   }
 
-  fn find_validator_index_for_slot(&self, slot: u64) -> Result<u64, StateError> {
+  fn find_validator_pubkey_for_slot(&self, slot: u64) -> Result<ECBlsPublicKey, StateError> {
     self.current_epoch
         .proposer_duties
         .iter()
-        .find(|&duty| {
-            duty.slot == slot && self.validator_indexes.contains(duty.validator_index as u64)
-        })
-        .map(|duty| duty.validator_index as u64)
+        .find(|&duty| 
+            duty.slot == slot
+        )
+        .map(|duty| duty.public_key.clone())
         .ok_or(StateError::NoValidatorInSlot)
   }
 
@@ -209,10 +209,7 @@ impl Block {
         self.signed_constraints_list
             .iter()
             .flat_map(|sc| sc.message.constraints.iter())
-            .filter_map(|c| match &c.transaction {
-                PooledTransactionsElement::BlobTransaction(blob_tx) => Some(&blob_tx.sidecar),
-                _ => None,
-            })
+            .filter_map(|c| c.transaction.blob_sidecar())
             .fold(
                 (Vec::new(), Vec::new(), Vec::new()),
                 |(mut commitments, mut proofs, mut blobs), bs| {
