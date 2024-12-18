@@ -1,11 +1,13 @@
 use std::{num::NonZeroUsize, sync::Arc};
 use parking_lot::RwLock;
-use alloy::primitives::{keccak256, Address};
+use alloy::{ primitives::{keccak256, Address}, eips::eip2718::{Decodable2718, Encodable2718} };
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use serde::{de, Deserialize, Deserializer, Serialize};
-use reth_primitives::{hex, PooledTransactionsElement};
+use reth_primitives::{PooledTransactionsElement};
 use thiserror::Error;
+
+use crate::constraints::{Constraint, deserialize_txs, serialize_txs};
 
 #[derive(Debug)]
 pub struct CommitmentRequestEvent {
@@ -61,8 +63,8 @@ impl CommitmentRequestHandler{
 pub struct PreconfRequest {
   pub slot: u64,
 
-  #[serde(deserialize_with = "deserialize_tx", serialize_with = "serialize_tx")]
-  pub tx: PooledTransactionsElement,
+  #[serde(deserialize_with = "deserialize_txs", serialize_with = "serialize_txs")]
+  pub txs: Vec<Constraint>,
 
   pub(crate) sender: Address,
 }
@@ -79,25 +81,3 @@ pub enum CommitmentRequestError {
 }
 
 pub type PreconfResult  = Result<Value, CommitmentRequestError>;
-
-pub fn deserialize_tx<'de, D>(deserializer: D) -> Result<PooledTransactionsElement, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-    let data = hex::decode(s.trim_start_matches("0x")).map_err(de::Error::custom)?;
-    PooledTransactionsElement::decode_enveloped(&mut data.as_slice()).map_err(de::Error::custom)
-}
-
-pub fn serialize_tx<S>(
-    tx: &PooledTransactionsElement,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    tracing::debug!("start to serialize");
-    let mut data = Vec::new();
-    tx.encode_enveloped(&mut data);
-    serializer.serialize_str(&format!("0x{}", hex::encode(&data)))
-}

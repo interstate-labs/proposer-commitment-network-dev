@@ -17,7 +17,13 @@ use blst::min_pk::SecretKey as BLSSecretKey;
 use crate::config::{ChainConfig, Config};
 use crate::state::Block;
 
-use super::{block_builder:: { convert_withdrawal_from_consensus_to_reth, convert_withdrawal_from_reth_to_consensus, create_alloy_execution_payload, create_consensus_execution_payload, create_execution_payload_header, BlockBuilder}, signature::sign_builder_message};
+use super::{
+    block_builder:: { 
+        create_consensus_execution_payload, 
+        create_execution_payload_header, 
+        BlockBuilder
+    },
+    signature::sign_builder_message};
 
 #[derive(Debug, serde::Deserialize)]
 pub struct GetHeaderParams {

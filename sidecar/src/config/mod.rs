@@ -1,11 +1,11 @@
 use group_config::{HOLEKSY_CHAIN_ID, KURTOSIS_CHAIN_ID};
 use reqwest::Url;
-use reth_primitives::Address;
 
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use rand::RngCore;
 
 use blst::min_pk::SecretKey as BLSSecretKey;
+use alloy::primitives::Address;
 
 pub mod group_config;
 pub use group_config::{ChainConfig, ValidatorIndexes, Chain};
@@ -43,6 +43,11 @@ pub struct Config {
     pub fee_recipient: Address,
     /// Local bulider bls private key for signing fallback payloads.
     pub builder_bls_private_key: BLSSecretKey,
+    /// The path to the ERC-2335 keystore secret passwords.
+    pub keystore_secrets_path: PathBuf,
+    /// Path to the keystores folder.
+    pub keystore_pubkeys_path: PathBuf,
+
 }
 
 impl Default for Config {
@@ -59,7 +64,9 @@ impl Default for Config {
             jwt_hex: String::new(),
             fee_recipient: Address::ZERO,
             builder_bls_private_key: random_bls_secret(),
-            collector_ws: String::new()
+            collector_ws: String::new(),
+            keystore_secrets_path: PathBuf::from("/work/proposer-commitment-network/sidecar/keystores/secrets"),
+            keystore_pubkeys_path: PathBuf::from("/work/proposer-commitment-network/sidecar/keystores/keys")
         }
     }
 }
@@ -97,6 +104,8 @@ impl Config {
             jwt_hex: envs["JWT"].clone(),
             fee_recipient: Address::parse_checksummed(&envs["FEE_RECIPIENT"], None).unwrap() ,
             builder_bls_private_key: random_bls_secret(),
+            keystore_secrets_path: PathBuf::from(envs["KEYSTORE_SECRETS_PATH"].as_str()),
+            keystore_pubkeys_path: PathBuf::from(envs["KEYSTORE_PUBKEYS_PATH"].as_str())
         }
     }
 }
@@ -113,8 +122,6 @@ pub fn random_bls_secret() -> BLSSecretKey {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use reth_primitives::Address;
-
     #[test]
     fn test_config_default() {
         let default_config = Config::default();
@@ -158,6 +165,8 @@ mod tests {
         envs.insert("SLOT_TIME".to_string(), "10".to_string());
         envs.insert("JWT".to_string(), "test-jwt".to_string());
         envs.insert("FEE_RECIPIENT".to_string(), "0x0000000000000000000000000000000000000001".to_string());
+        envs.insert("KEYSTORE_SECRETS_PATH".to_string(), "/work/proposer-commitment-network/sidecar/keystores/secrets".to_string());
+        envs.insert("KEYSTORE_PUBKEYS_PATH".to_string(), "/work/proposer-commitment-network/sidecar/keystores/keys".to_string());
 
         let config = Config::new(envs);
 

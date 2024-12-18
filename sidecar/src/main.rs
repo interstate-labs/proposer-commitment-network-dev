@@ -1,4 +1,5 @@
 use alloy::{primitives::FixedBytes, rpc::types::beacon::events::HeadEvent};
+use ethereum_consensus::deneb::compute_signing_root;
 use futures::StreamExt;
 use parking_lot::RwLock;
 use rand::RngCore;
@@ -14,9 +15,10 @@ pub use beacon_api_client::mainnet::Client;
 
 use env_file_reader::read_file;
 
-use constraints::{run_constraints_proxy_server, FallbackPayloadFetcher, FetchPayloadRequest, ConstraintsMessage, FallbackBuilder, SignedConstraints };
+use constraints::{run_constraints_proxy_server, ConstraintsMessage, FallbackBuilder, FallbackPayloadFetcher, FetchPayloadRequest, SignedConstraints, TransactionExt };
 use commitment::{run_commitment_rpc_server, PreconfResponse};
 use config::Config;
+use keystores::{BLSSig, Keystores};
 
 mod commitment;
 mod state;
@@ -25,6 +27,7 @@ mod errors;
 mod config;
 mod test_utils;
 mod utils;
+mod keystores;
 
 pub type BLSBytes = FixedBytes<96>;
 pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
@@ -43,6 +46,8 @@ async fn main() {
 
     let ( sender, mut receiver ) = mpsc::channel(1024);
     let config = Config::new(envs);
+
+    let keystores = Keystores::new(&config.keystore_pubkeys_path, &config.keystore_secrets_path, &config.chain);
 
     run_commitment_rpc_server(sender, &config).await;
 
@@ -86,19 +91,50 @@ async fn main() {
             Some( CommitmentRequestEvent{req, res} ) = receiver.recv() => {
                 tracing::info!("Received preconfirmation request");
                 let slot = req.slot;
-                
-                let message = ConstraintsMessage::build(10, req);
-                let signature =  BLSBytes::from(signer_key.sign(&message.digest(), BLS_DST_PREFIX, &[]).to_bytes());
-                let signed_constraints = SignedConstraints { message, signature };
-                // constraint_state.add_constraint(slot, signed_constraints);
+                let pubkeys = keystores.get_pubkeys();
 
-                match commit_boost_api.send_constraints_to_be_collected(&vec![signed_constraints.clone()]).await {
-                    Ok(_) => tracing::info!(?signed_constraints,"Sent constratins successfully to be collected."),
-                    Err(err) => tracing::error!(err = ?err, "Error sending constraints to be collected")
+                match constraint_state.validate_preconf_request(&req) {
+                    Ok(pubkey) => {
+
+                        if !pubkeys.contains(&pubkey) {
+                            tracing::error!("Not available validator in slot {} to sign in sidecar", slot);
+                            return;
+                        }
+
+                        // TODO::Validate preconfirmation request      
+
+                        // for tx in req.txs.iter() {
+                            let tx = req.txs[0].clone();
+                            let message =
+                                ConstraintsMessage::from_tx(pubkey.clone(), slot, tx.clone());
+                            let digest = message.digest();
+
+                            let signature = keystores.sign_commit_boost_root(digest, &pubkey);
+
+                            let signed_constraints = match signature {
+                                Ok(signature) => SignedConstraints { message, signature },
+                                Err(e) => {
+                                    tracing::error!(?e, "Failed to sign constraints");
+                                    return;
+                                }
+                            };
+
+                            // constraint_state.add_constraint(slot, signed_constraints);
+                                    
+                            match commit_boost_api.send_constraints_to_be_collected(&vec![signed_constraints.clone()]).await {
+                                Ok(_) => tracing::info!(?signed_constraints,"Sent constratins successfully to be collected."),
+                                Err(err) => tracing::error!(err = ?err, "Error sending constraints to be collected")
+                            };
+
+                            let response = serde_json::to_value( PreconfResponse { ok: true}).map_err(Into::into);
+                            let _ = res.send(response).ok();
+
+                        // }                  
+                    },
+                    Err(err) => {
+                        tracing::error!(?err, "No available vaildators");
+                    }
                 };
-
-                let response = serde_json::to_value( PreconfResponse { ok: true}).map_err(Into::into);
-                let _ = res.send(response).ok();
             },
             Some(slot) = constraint_state.commitment_deadline.wait() => {
                 tracing::info!("The commitment deadline is reached in slot {}", slot);
