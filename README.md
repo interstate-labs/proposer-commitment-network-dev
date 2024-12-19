@@ -23,12 +23,6 @@ cargo build
 cargo run
 `
 
-## Using docker
-`
-docker build -t whereasjovially/interstate-boost:1.1.0-dev .
-docker compose up -d
-`
-
 # Preconfirmation request RPC interface
 ## Endpoint
 `{SIDECAR_URL}/api/v1/preconfirmation`
