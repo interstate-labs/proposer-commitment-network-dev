@@ -24,6 +24,10 @@ pub enum CommitBoostError {
     FailedSubmittingConstraints(ErrorResponse),
     #[error("Failed to fetch local payload for slot {0}")]
     FailedToFetchLocalPayload(u64),
+    #[error("Failed to send delegating request {0:?}")]
+    FailedDelegating(ErrorResponse),
+    #[error("Failed to send revoking request {0:?}")]
+    FailedRevoking(ErrorResponse),
     #[error("Axum error: {0:?}")]
     AxumError(#[from] axum::Error),
     #[error("Json error: {0:?}")]
@@ -38,6 +42,7 @@ pub enum CommitBoostError {
     Generic(String),
     #[error("Locally-built payload does not match expected signed header")]
     LocalPayloadIntegrity(#[from] super::constraints::LocalPayloadIntegrityError),
+    
 }
 
 impl IntoResponse for CommitBoostError {
@@ -53,6 +58,12 @@ impl IntoResponse for CommitBoostError {
                 (StatusCode::from_u16(error.code).unwrap(), Json(error)).into_response()
             }
             CommitBoostError::FailedSubmittingConstraints(error) => {
+                (StatusCode::from_u16(error.code).unwrap(), Json(error)).into_response()
+            }
+            CommitBoostError::FailedDelegating(error) => {
+                (StatusCode::from_u16(error.code).unwrap(), Json(error)).into_response()
+            }
+            CommitBoostError::FailedRevoking(error) => {
                 (StatusCode::from_u16(error.code).unwrap(), Json(error)).into_response()
             }
             CommitBoostError::AxumError(err) => {

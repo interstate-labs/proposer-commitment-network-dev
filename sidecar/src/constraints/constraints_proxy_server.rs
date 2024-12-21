@@ -6,7 +6,7 @@ use tokio::sync::{oneshot, mpsc};
 
 use ethereum_consensus::{builder::SignedValidatorRegistration, deneb::mainnet::SignedBlindedBeaconBlock, Fork};
 
-use crate::{config::Config, constraints::{CommitBoostApi, GET_HEADER_PATH, GET_PAYLOAD_PATH, REGISTER_VALIDATORS_PATH, STATUS_PATH}, errors::CommitBoostError};
+use crate::{config::Config, constraints::{CommitBoostApi, GET_HEADER_PATH, GET_PAYLOAD_PATH, REGISTER_VALIDATORS_PATH, STATUS_PATH}, delegation::load_signed_delegations, errors::CommitBoostError};
 
 use super::{builder::{GetHeaderParams, GetPayloadResponse, PayloadAndBid, SignedBuilderBid}, VersionedValue};
 
@@ -15,9 +15,22 @@ pub async fn run_constraints_proxy_server<P>(
   fallback_payload_fetcher: P
 ) -> eyre::Result<CommitBoostApi>
 where P: PayloadFetcher + Send + Sync + 'static,
-{    //TODO: replace commit-boost url
-    let commit_boost_api: CommitBoostApi = CommitBoostApi::new(config.collector_url.clone());
-    let proxy_server = Arc::new(ConstraintsAPIProxyServer::new(commit_boost_api, fallback_payload_fetcher));
+{   
+    let mut delegations = Vec::new(); 
+    if let Some(delegations_path) = &config.delegations_path {
+        match load_signed_delegations(delegations_path) {
+            Ok(contents) => {
+                tracing::info!("Loaded {} delegations", contents.len());
+                delegations.extend(contents);                
+            }
+            Err(e) => {
+                tracing::error!(%e, "Failed to load delegations");
+            }
+        }
+    }
+
+    let commit_boost_api: CommitBoostApi = CommitBoostApi::new(config.collector_url.clone(), &delegations);
+    let proxy_server = Arc::new(ConstraintsAPIProxyServer::new(commit_boost_api.clone(), fallback_payload_fetcher));
 
     let router = Router::new()
     .route("/", get(description))
@@ -41,7 +54,7 @@ where P: PayloadFetcher + Send + Sync + 'static,
 
     tracing::info!("commit boost server is listening on .. {}", addr);
 
-    Ok(CommitBoostApi::new(config.collector_url.clone()))
+    Ok(commit_boost_api)
 
 }
 
