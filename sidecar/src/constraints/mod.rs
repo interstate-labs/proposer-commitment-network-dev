@@ -163,7 +163,7 @@ pub struct SignedConstraints {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct ConstraintsMessage {
     /// The validator publickeyt of the proposer sidecar.
-    pub validator_pubkey: ECBlsPublicKey,
+    pub pubkey: ECBlsPublicKey,
 
     /// The consensus slot at which the constraints are valid
     pub slot: u64,
@@ -173,32 +173,33 @@ pub struct ConstraintsMessage {
     pub top: bool,
 
     /// The constraints that need to be signed.
-    pub constraints: Vec<Constraint>,
+    #[serde(deserialize_with = "deserialize_txs", serialize_with = "serialize_txs")]
+    pub transactions: Vec<Constraint>,
 }
 
 impl ConstraintsMessage {
   pub fn build(validator_pubkey: ECBlsPublicKey, request: PreconfRequest) -> Self {
     let constraints = request.txs;
     Self {
-        validator_pubkey,
+        pubkey:validator_pubkey,
         slot: request.slot,
-        constraints,
+        transactions:constraints,
         top: false
     }
   }
   
   pub fn from_tx(validator_pubkey: ECBlsPublicKey, slot: u64, constraint: Constraint) -> Self {
-    Self { validator_pubkey, slot, top: false, constraints: vec![constraint] }
+    Self { pubkey:validator_pubkey, slot, top: false, transactions: vec![constraint] }
   }
 
   pub fn digest(&self) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    hasher.update(self.validator_pubkey.to_vec());
+    hasher.update(self.pubkey.to_vec());
     hasher.update(self.slot.to_le_bytes());
     hasher.update((self.top as u8).to_le_bytes());
 
-    for constraint in &self.constraints {
-        hasher.update(constraint.transaction.hash());
+    for constraint in &self.transactions {
+        hasher.update(constraint.tx.hash());
     }
 
     hasher.finalize().into()
@@ -207,22 +208,20 @@ impl ConstraintsMessage {
 }
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Constraint {
-    pub index: Option<u64>,
-    #[serde(rename(serialize = "tx", deserialize = "tx"))]
-    pub(crate) transaction: PooledTransactionsElement,
+    pub(crate) tx: PooledTransactionsElement,
     pub(crate) sender: Option<Address>,
 }
 
 impl From<PooledTransactionsElement> for Constraint {
-    fn from(transaction: PooledTransactionsElement) -> Self {
-        Self { transaction, sender: None, index: None }
+    fn from(tx: PooledTransactionsElement) -> Self {
+        Self { tx, sender: None }
     }
 }
 
 impl Constraint {
     pub fn decode_enveloped(data: impl AsRef<[u8]>) -> eyre::Result<Self> {
-        let transaction = PooledTransactionsElement::decode_2718(&mut data.as_ref())?;
-        Ok(Self { transaction, sender: None, index: None })
+        let tx = PooledTransactionsElement::decode_2718(&mut data.as_ref())?;
+        Ok(Self { tx, sender: None })
     }
 
 }
@@ -343,13 +342,13 @@ impl CommitBoostApi {
             .send()
             .await?;
 
-        // let response_text = response.text().await?;
-        // tracing::info!("response status: {}", response.status());
+        // let response_text = response.clone().text().await?;
+        tracing::info!("response status: {}", response.status());
 
-        if response.status() != StatusCode::OK {
-            let error = response.json::<ErrorResponse>().await?;
-            return Err(CommitBoostError::FailedSubmittingConstraints(error));
-        }
+        // if response.status() != StatusCode::OK {
+        //     let error = response.json::<ErrorResponse>().await?;
+        //     return Err(CommitBoostError::FailedSubmittingConstraints(error));
+        // }
 
         Ok(())
     }
@@ -515,7 +514,7 @@ pub fn serialize_txs<S: serde::Serializer>(
   ) -> Result<S::Ok, S::Error> {
     let mut seq = serializer.serialize_seq(Some(txs.len()))?;
     for tx in txs {
-        let encoded = tx.transaction.encoded_2718();
+        let encoded = tx.tx.encoded_2718();
         seq.serialize_element(&hex::encode_prefixed(encoded))?;
     }
     seq.end()
@@ -533,7 +532,7 @@ pub fn serialize_txs<S: serde::Serializer>(
         let data = hex::decode(s.trim_start_matches("0x")).map_err(de::Error::custom)?;
         let transaction = PooledTransactionsElement::decode_2718(&mut data.as_slice())
             .map_err(de::Error::custom)
-            .map(|tx| Constraint { transaction:tx, sender: None, index: None })?;
+            .map(|tx| Constraint { tx, sender: None})?;
         txs.push(transaction);
     }
   
