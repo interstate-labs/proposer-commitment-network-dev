@@ -188,7 +188,7 @@ impl Block {
   pub fn get_transactions(&self) -> Vec<PooledTransactionsElement> {
     self.signed_constraints_list
         .iter()
-        .flat_map(|sc| sc.message.constraints.iter().map(|c| c.transaction.clone()))
+        .flat_map(|sc| sc.message.transactions.iter().map(|c| c.tx.clone()))
         .collect()
   }
   
@@ -197,9 +197,9 @@ impl Block {
         .iter()
         .flat_map(|sc| {
             sc.message
-                .constraints
+                .transactions
                 .iter()
-                .map(|c| c.transaction.clone().into_transaction())
+                .map(|c| c.tx.clone().into_transaction())
         })
         .collect()
  }
@@ -208,8 +208,8 @@ impl Block {
     let (commitments, proofs, blobs) =
         self.signed_constraints_list
             .iter()
-            .flat_map(|sc| sc.message.constraints.iter())
-            .filter_map(|c| c.transaction.blob_sidecar())
+            .flat_map(|sc| sc.message.transactions.iter())
+            .filter_map(|c| c.tx.blob_sidecar())
             .fold(
                 (Vec::new(), Vec::new(), Vec::new()),
                 |(mut commitments, mut proofs, mut blobs), bs| {
