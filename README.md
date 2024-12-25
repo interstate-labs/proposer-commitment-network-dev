@@ -2,10 +2,12 @@
 [![Chat](https://img.shields.io/endpoint?color=neon&logo=telegram&label=chat&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2F%2BPcs9bykxK3BiMzk5)]([https://t.me/+Pcs9bykxK3BiMzk5](https://t.me/+-i4dP7U2BggxMzAx))
 [![X](https://img.shields.io/twitter/follow/interstatefdn)](https://x.com/interstatefdn)
 
-# Interstate sidecar to send preconfirmation requests to commit-boost.
+# Interstate Sidecar To Enable Continous Transaction Execution on Mainnet.
+Interstate allows instant and continuous transaction confirmations on mainnet, this is a massive UX improvement for Ethereum. 
 
-![Multiparty Preconfirmation Flow](static/multipartypreconf.png)
-Interstate's design allows multiple preconfirmations sidecars to run on the same validator. This design promotes decentralization: https://docs.interstate.so/research/multiparty-preconf. 
+![Full Design](static/flow.png)
+
+Interstate's design optionally allows multiple preconfirmations sidecars to run on the same validator. This design promotes decentralization: https://docs.interstate.so/research/multiparty-preconf. 
 
 ## How it works
 ![Interstate protocol sequence chart](static/interstate-sequence.png)
