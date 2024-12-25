@@ -3,7 +3,7 @@
 [![X](https://img.shields.io/twitter/follow/interstatefdn)](https://x.com/interstatefdn)
 
 # Interstate Sidecar To Enable Continous Transaction Execution on Mainnet.
-Interstate allows instant and continuous transaction confirmations on mainnet, this is a massive UX improvement for Ethereum. 
+Interstate is an extension to the PBS / MEV-Boost pipeline which enables instant and continuous transaction confirmations on mainnet, this is a massive UX improvement for Ethereum. 
 
 ![Full Design](static/flow.jpg)
 
