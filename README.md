@@ -5,7 +5,7 @@
 # Interstate Sidecar To Enable Continous Transaction Execution on Mainnet.
 Interstate allows instant and continuous transaction confirmations on mainnet, this is a massive UX improvement for Ethereum. 
 
-![Full Design](static/flow.png)
+![Full Design](static/flow.jpg)
 
 Interstate's design optionally allows multiple preconfirmations sidecars to run on the same validator. This design promotes decentralization: https://docs.interstate.so/research/multiparty-preconf. 
 
