@@ -583,7 +583,7 @@ pub(crate) fn to_byte_vector(value: Bloom) -> ByteVector<256> {
 #[cfg(test)]
 mod tests {
     use alloy::{
-        eips::eip2718::Encodable2718, network::{EthereumWallet, TransactionBuilder}, primitives::{hex, Address}, signers::{k256::ecdsa::SigningKey, local::PrivateKeySigner}
+        eips::eip2718::Encodable2718, network::{EthereumWallet, TransactionBuilder}, primitives::{hex, keccak256, Address, PrimitiveSignature}, signers::{k256::ecdsa::SigningKey, local::PrivateKeySigner, Signer}
     };
 
     use ethereum_consensus::crypto::PublicKey as ECBlsPublicKey;
@@ -602,7 +602,7 @@ mod tests {
         let raw_sk = "5d2344259f42259f82d2c140aa66102ba89b57b4883ee441a8b312622bd42491".to_string();
         let sk = SigningKey::from_slice(hex::decode(raw_sk)?.as_slice())?;
         let signer = PrivateKeySigner::from_signing_key(sk.clone());
-        let wallet = EthereumWallet::from(signer);
+        let wallet = EthereumWallet::from(signer.clone());
 
         let addy = Address::from_private_key(&sk);
         let tx = default_test_transaction(addy, Some(1)).with_chain_id(1);
@@ -610,9 +610,26 @@ mod tests {
         let raw_encoded = tx_signed.encoded_2718();
 
         let tx = Constraint::decode_enveloped(&mut raw_encoded.as_slice())?;
+        let txs = vec![tx];
+
+        let message_digest = {
+            let mut data = Vec::new();
+            // First field is the concatenation of all the transaction hashes
+            data.extend_from_slice(
+                &txs
+                  .iter()
+                  .map(|tx| tx.tx.hash().as_slice())
+                  .collect::<Vec<_>>()
+                  .concat(),
+            );
+            keccak256(data)
+        };
+
+        let ecda_signature = signer.clone().sign_hash(&message_digest).await.unwrap();
 
         let request = PreconfRequest {
-            txs:vec![tx],
+            signature: ecda_signature,
+            txs,
             sender:addy,
             slot: 42,
         };

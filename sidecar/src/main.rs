@@ -42,7 +42,10 @@ async fn main() {
         .expect("setting default subscriber failed");
 
     // let config = Config::parse_from_cli().unwrap();
-    let envs = read_file("/work/proposer-commitment-network/sidecar/.env").unwrap();
+    tracing::info!("path: {}", env!["CARGO_MANIFEST_DIR"]);
+    let mut env_path = env!["CARGO_MANIFEST_DIR"].to_string();
+    env_path.push_str("/.env");
+    let envs = read_file(env_path).unwrap();
 
     let ( sender, mut receiver ) = mpsc::channel(1024);
     let config = Config::new(envs);
