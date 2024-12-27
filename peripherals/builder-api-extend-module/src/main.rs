@@ -9,14 +9,15 @@ mod extender;
 mod server;
 mod error;
 mod utils;
+mod auth;
 
 #[tokio::main]
 async fn main(){
     let subscriber = Subscriber::builder()
     .with_max_level(tracing::Level::DEBUG)
     .finish();
-
-    let envs = read_file("/work/interstate-protocol/builder-api-extend-module/.env").unwrap();
+    // need to fix path
+    let envs = read_file(".env").unwrap();
 
     tracing::subscriber::set_global_default(subscriber)
         .expect("setting default subscriber failed");

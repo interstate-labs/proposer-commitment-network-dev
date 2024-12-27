@@ -38,6 +38,10 @@ pub enum BuilderApiError {
     InvalidFork(String),
     #[error("Generic error: {0}")]
     Generic(String),
+    #[error("Missing: {0}")]
+    InvalidParams(String),
+    #[error("Signature Verification Failed: {0}")]
+    SignatureVerificationFailed(String),
 }
 
 impl IntoResponse for BuilderApiError {
@@ -81,6 +85,12 @@ impl IntoResponse for BuilderApiError {
             }
             BuilderApiError::Generic(err) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, Json(err)).into_response()
+            }
+            BuilderApiError::InvalidParams(err) => {
+                (StatusCode::UNAUTHORIZED, Json(err)).into_response()
+            }
+            BuilderApiError::SignatureVerificationFailed(err) => {
+                (StatusCode::UNAUTHORIZED, Json(err)).into_response()
             }
             BuilderApiError::FailedJoinningInExtender(err) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, Json(err)).into_response()
