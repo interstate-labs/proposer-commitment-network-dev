@@ -224,6 +224,24 @@ impl Constraint {
         Ok(Self { tx, sender: None })
     }
 
+    pub fn effective_tip_per_gas(&self, base_fee: u128) -> Option<u128> {
+        let max_fee_per_gas = self.tx.max_fee_per_gas();
+
+        if max_fee_per_gas < base_fee {
+            return None;
+        }
+
+        // Calculate the difference between max_fee_per_gas and base_fee
+        let fee = max_fee_per_gas - base_fee;
+
+        // Compare the fee with max_priority_fee_per_gas (or gas price for non-EIP1559 transactions)
+        if let Some(priority_fee) = self.tx.max_priority_fee_per_gas() {
+            Some(fee.min(priority_fee))
+        } else {
+            Some(fee)
+        }
+    }
+
 }
 
 #[derive(Debug, Clone)]
