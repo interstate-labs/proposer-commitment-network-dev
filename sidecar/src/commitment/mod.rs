@@ -1,11 +1,11 @@
 pub mod request;
-use std::{net::SocketAddr, sync::{Arc}};
-use axum::{debug_handler, extract::State, http::StatusCode, routing::post, Json, Router};
+use std::{net::SocketAddr, sync::Arc, time::Instant};
+use axum::{debug_handler, extract::{Request, State}, http::StatusCode, middleware::{self, Next}, response::IntoResponse, routing::post, Json, Router};
 use serde::Serialize;
 use serde_json::Value;
 use tokio::sync::{mpsc::{self, Sender, Receiver}, oneshot};
 
-use crate::commitment::request::{CommitmentRequestError, CommitmentRequestEvent, CommitmentRequestHandler, PreconfRequest};
+use crate::{commitment::request::{CommitmentRequestError, CommitmentRequestEvent, CommitmentRequestHandler, PreconfRequest}, metrics::ApiMetrics};
 use crate::config::Config;
 
 pub async fn run_commitment_rpc_server ( event_sender: mpsc::Sender<CommitmentRequestEvent>, config: &Config) {
@@ -14,6 +14,7 @@ pub async fn run_commitment_rpc_server ( event_sender: mpsc::Sender<CommitmentRe
 
   let app = Router::new()
   .route("/api/v1/preconfirmation", post(handle_preconfirmation))
+  .route_layer(middleware::from_fn(track_metrics))
   .with_state(handler.clone());
   
   let addr: SocketAddr = SocketAddr::from(([0,0,0,0], config.commitment_port));
@@ -60,4 +61,18 @@ impl axum::response::IntoResponse for CommitmentRequestError {
       }
      }
   }
+}
+
+pub async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
+  let path = req.uri().path().to_owned();
+  let method = req.method().to_string();
+
+  let start = Instant::now();
+  let response = next.run(req).await;
+  let latency = start.elapsed();
+  let status = response.status().as_u16().to_string();
+
+  ApiMetrics::observe_http_request(latency, method, path, status);
+
+  response
 }

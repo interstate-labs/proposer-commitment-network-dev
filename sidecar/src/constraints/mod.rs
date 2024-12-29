@@ -17,7 +17,11 @@ use serde::{Deserialize, Serialize, de, ser::SerializeSeq };
 
 use reqwest::{ Client, ClientBuilder, StatusCode, Url };
 
-use crate::{commitment::request::PreconfRequest, errors::{CommitBoostError, ErrorResponse}};
+use crate::{
+    commitment::request::PreconfRequest, 
+    errors::{CommitBoostError, ErrorResponse},
+    delegation::{SignedDelegationMessage, SignedRevocationMessage},
+};
 use crate::config::Config;
 
 mod builder;
@@ -38,8 +42,13 @@ pub const GET_HEADER_PATH: &str = "/eth/v1/builder/header/:slot/:parent_hash/:pu
 pub const GET_PAYLOAD_PATH: &str = "/eth/v1/builder/blinded_blocks";
 /// The path to the constraints API submit constraints endpoint.
 pub const CONSTRAINTS_PATH: &str = "/constraints/v1/builder/constraints";
+/// The path to the constraints API submit constraints endpoint.
+pub const PERMISSION_DELEGATE_PATH: &str = "/constraints/v1/builder/delegate";
+/// The path to the constraints API submit constraints endpoint.
+pub const PERMISSION_REVOKE_PATH: &str = "/constraints/v1/builder/revoke";
 /// The path to the constraints API collect constraints endpoint.
 pub const CONSTRAINTS_COLLECT_PATH: &str = "/constraints/v1/builder/constraints_collect";
+
 
 pub trait TransactionExt {
     /// Returns the gas limit of the transaction.
@@ -163,7 +172,7 @@ pub struct SignedConstraints {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct ConstraintsMessage {
     /// The validator publickeyt of the proposer sidecar.
-    pub validator_pubkey: ECBlsPublicKey,
+    pub pubkey: ECBlsPublicKey,
 
     /// The consensus slot at which the constraints are valid
     pub slot: u64,
@@ -173,32 +182,33 @@ pub struct ConstraintsMessage {
     pub top: bool,
 
     /// The constraints that need to be signed.
-    pub constraints: Vec<Constraint>,
+    #[serde(deserialize_with = "deserialize_txs", serialize_with = "serialize_txs")]
+    pub transactions: Vec<Constraint>,
 }
 
 impl ConstraintsMessage {
   pub fn build(validator_pubkey: ECBlsPublicKey, request: PreconfRequest) -> Self {
     let constraints = request.txs;
     Self {
-        validator_pubkey,
+        pubkey:validator_pubkey,
         slot: request.slot,
-        constraints,
-        top: false
+        transactions:constraints,
+        top: true
     }
   }
   
   pub fn from_tx(validator_pubkey: ECBlsPublicKey, slot: u64, constraint: Constraint) -> Self {
-    Self { validator_pubkey, slot, top: false, constraints: vec![constraint] }
+    Self { pubkey:validator_pubkey, slot, top: true, transactions: vec![constraint] }
   }
 
   pub fn digest(&self) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    hasher.update(self.validator_pubkey.to_vec());
+    hasher.update(self.pubkey.to_vec());
     hasher.update(self.slot.to_le_bytes());
     hasher.update((self.top as u8).to_le_bytes());
 
-    for constraint in &self.constraints {
-        hasher.update(constraint.transaction.hash());
+    for constraint in &self.transactions {
+        hasher.update(constraint.tx.hash());
     }
 
     hasher.finalize().into()
@@ -207,22 +217,38 @@ impl ConstraintsMessage {
 }
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Constraint {
-    pub index: Option<u64>,
-    #[serde(rename(serialize = "tx", deserialize = "tx"))]
-    pub(crate) transaction: PooledTransactionsElement,
+    pub(crate) tx: PooledTransactionsElement,
     pub(crate) sender: Option<Address>,
 }
 
 impl From<PooledTransactionsElement> for Constraint {
-    fn from(transaction: PooledTransactionsElement) -> Self {
-        Self { transaction, sender: None, index: None }
+    fn from(tx: PooledTransactionsElement) -> Self {
+        Self { tx, sender: None }
     }
 }
 
 impl Constraint {
     pub fn decode_enveloped(data: impl AsRef<[u8]>) -> eyre::Result<Self> {
-        let transaction = PooledTransactionsElement::decode_2718(&mut data.as_ref())?;
-        Ok(Self { transaction, sender: None, index: None })
+        let tx = PooledTransactionsElement::decode_2718(&mut data.as_ref())?;
+        Ok(Self { tx, sender: None })
+    }
+
+    pub fn effective_tip_per_gas(&self, base_fee: u128) -> Option<u128> {
+        let max_fee_per_gas = self.tx.max_fee_per_gas();
+
+        if max_fee_per_gas < base_fee {
+            return None;
+        }
+
+        // Calculate the difference between max_fee_per_gas and base_fee
+        let fee = max_fee_per_gas - base_fee;
+
+        // Compare the fee with max_priority_fee_per_gas (or gas price for non-EIP1559 transactions)
+        if let Some(priority_fee) = self.tx.max_priority_fee_per_gas() {
+            Some(fee.min(priority_fee))
+        } else {
+            Some(fee)
+        }
     }
 
 }
@@ -230,14 +256,16 @@ impl Constraint {
 #[derive(Debug, Clone)]
 pub struct CommitBoostApi {
     url: Url,
-    client: Client
+    client: Client,
+    delegations: Vec<SignedDelegationMessage>
 }
 
 impl CommitBoostApi {
-    pub fn new (url: Url) -> Self {
+    pub fn new (url: Url, delegations_messages: &Vec<SignedDelegationMessage>) -> Self {
         Self {
             url,
-            client: ClientBuilder::new().user_agent("interstate-boost").build().unwrap()
+            client: ClientBuilder::new().user_agent("interstate-boost").build().unwrap(),
+            delegations: delegations_messages.clone()
         }
     }
 
@@ -245,6 +273,7 @@ impl CommitBoostApi {
         None
     }    
     
+    /// Builder API
     /// Implements: <https://ethereum.github.io/builder-specs/#/Builder/status>
     async fn status(&self) -> Result<StatusCode, CommitBoostError> {
         Ok(self
@@ -328,6 +357,8 @@ impl CommitBoostApi {
         Ok(payload)
     }
 
+
+    // Constraints API
     pub async fn send_constraints(
         &self,
         constraints: &Vec<SignedConstraints>,
@@ -343,13 +374,13 @@ impl CommitBoostApi {
             .send()
             .await?;
 
-        // let response_text = response.text().await?;
-        // tracing::info!("response status: {}", response.status());
+        // let response_text = response.clone().text().await?;
+        tracing::info!("response status: {}", response.status());
 
-        if response.status() != StatusCode::OK {
-            let error = response.json::<ErrorResponse>().await?;
-            return Err(CommitBoostError::FailedSubmittingConstraints(error));
-        }
+        // if response.status() != StatusCode::OK {
+        //     let error = response.json::<ErrorResponse>().await?;
+        //     return Err(CommitBoostError::FailedSubmittingConstraints(error));
+        // }
 
         Ok(())
     }
@@ -410,6 +441,41 @@ impl CommitBoostApi {
         Ok(header)
     }
 
+    async fn delegate(&self, signed_data: &[SignedDelegationMessage]) -> Result<(), CommitBoostError> {
+        let response = self
+            .client
+            .post(self.url.join(PERMISSION_DELEGATE_PATH).unwrap())
+            .header("content-type", "application/json")
+            .body(serde_json::to_string(signed_data)?)
+            .send()
+            .await?;
+
+        if response.status() != StatusCode::OK {
+            let error = response.json::<ErrorResponse>().await?;
+            return Err(CommitBoostError::FailedDelegating(error));
+        }
+
+        Ok(())
+    }
+
+    async fn revoke(&self, signed_data: &[SignedRevocationMessage]) -> Result<(), CommitBoostError> {
+        let response = self
+            .client
+            .post(self.url.join(PERMISSION_REVOKE_PATH).unwrap())
+            .header("content-type", "application/json")
+            .body(serde_json::to_string(signed_data)?)
+            .send()
+            .await?;
+
+        if response.status() != StatusCode::OK {
+            let error = response.json::<ErrorResponse>().await?;
+            return Err(CommitBoostError::FailedRevoking(error));
+        }
+
+        Ok(())
+    }
+
+
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -422,92 +488,6 @@ pub struct VersionedValue<T> {
     pub meta: HashMap<String, serde_json::Value>,
 }
 
-pub async fn run_commit_booster (config:&Config) -> CommitBoostApi {
-
-    //TODO: replace commit-boost url
-    let commit_booster: Arc<CommitBoostApi> = Arc::new(CommitBoostApi::new(config.collector_url.clone()));
-
-    let router = Router::new()
-    .route("/", get(description))
-    .route(STATUS_PATH, get(status))
-    .route(
-        REGISTER_VALIDATORS_PATH,
-        post(register_validators),
-    )
-    .route(GET_HEADER_PATH, get(get_header))
-    .route(GET_PAYLOAD_PATH, post(get_payload))
-    .with_state(commit_booster);
-
-    let addr: SocketAddr = SocketAddr::from(([0,0,0,0], config.builder_port));
-
-    //TODO: replace a listening port as a builder
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-
-    tokio::spawn( async {
-        axum::serve(listener, router).await.unwrap();
-    });
-
-    tracing::info!("commit boost server is listening on .. {}", addr);
-
-    CommitBoostApi::new(config.collector_url.clone())
-}
-
-async fn description() -> Html<& 'static str> {
-    Html("This is an endpoint to interact with commit-boost")
-}
-
-async fn status(State(api):State<Arc<CommitBoostApi>>) -> StatusCode {
-    tracing::debug!("handling STATUS request");
-
-    let status = match api.status().await {
-        Ok(status) => status,
-        Err(err) => {
-            tracing::error!(%err, "Failed in getting status from commit-boost");
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
-    };
-
-    status
-}
-
-async fn get_header( State(api):State<Arc<CommitBoostApi>>, Path(params): Path<GetHeaderParams>) -> Result<Json<VersionedValue<SignedBuilderBid>>, CommitBoostError> {
-    tracing::debug!("handling GET_HEADER request");
-    match api.get_header_with_proofs(params).await {
-        Ok(header) => {
-            return Ok(Json(header));
-        },
-        Err(err) => {
-            tracing::error!("Failed in getting header with proof from commit-boost");
-            return Err(err);
-        }
-    }
-}
-
-async fn get_payload( State(api): State<Arc<CommitBoostApi>>, Json(signed_blinded_block):Json<SignedBlindedBeaconBlock>) -> Result<Json<GetPayloadResponse>, CommitBoostError> {
-    tracing::debug!("handling GET_PAYLOAD request");
-
-    match api
-            .get_payload(signed_blinded_block)
-            .await
-            .map(Json)
-            .map_err(|e| {
-                tracing::error!(%e, "Failed to get payload from mev-boost");
-                e
-            })
-    {
-        Ok(payload) => return Ok(payload),
-        Err(err) => {
-            tracing::error!("Failed in getting payload from commit-boost");
-            return Err(err);
-        }
-    };
-}
-
-async fn register_validators( State(api):State<Arc<CommitBoostApi>>, Json(registors):Json<Vec<SignedValidatorRegistration>>) -> Result<StatusCode, CommitBoostError> {
-    tracing::debug!("handling REGISTER_VALIDATORS_REQUEST");
-    api.register_validators(registors).await.map(|_| StatusCode::OK)
-}
-
 /// Serialize a list of transactions into a sequence of hex-encoded strings.
 pub fn serialize_txs<S: serde::Serializer>(
     txs: &[Constraint],
@@ -515,7 +495,7 @@ pub fn serialize_txs<S: serde::Serializer>(
   ) -> Result<S::Ok, S::Error> {
     let mut seq = serializer.serialize_seq(Some(txs.len()))?;
     for tx in txs {
-        let encoded = tx.transaction.encoded_2718();
+        let encoded = tx.tx.encoded_2718();
         seq.serialize_element(&hex::encode_prefixed(encoded))?;
     }
     seq.end()
@@ -533,7 +513,7 @@ pub fn serialize_txs<S: serde::Serializer>(
         let data = hex::decode(s.trim_start_matches("0x")).map_err(de::Error::custom)?;
         let transaction = PooledTransactionsElement::decode_2718(&mut data.as_slice())
             .map_err(de::Error::custom)
-            .map(|tx| Constraint { transaction:tx, sender: None, index: None })?;
+            .map(|tx| Constraint { tx, sender: None})?;
         txs.push(transaction);
     }
   

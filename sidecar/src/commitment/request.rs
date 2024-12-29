@@ -1,13 +1,13 @@
 use std::{num::NonZeroUsize, sync::Arc};
 use parking_lot::RwLock;
-use alloy::{ primitives::{keccak256, Address}, eips::eip2718::{Decodable2718, Encodable2718} };
+use alloy::{ eips::eip2718::{Decodable2718, Encodable2718}, primitives::{keccak256, Address, PrimitiveSignature, B256} };
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use serde::{de, Deserialize, Deserializer, Serialize};
 use reth_primitives::{PooledTransactionsElement};
 use thiserror::Error;
 
-use crate::constraints::{Constraint, deserialize_txs, serialize_txs};
+use crate::constraints::{deserialize_txs, serialize_txs, Constraint, TransactionExt};
 
 #[derive(Debug)]
 pub struct CommitmentRequestEvent {
@@ -32,6 +32,15 @@ impl CommitmentRequestHandler{
   }
 
   pub async fn handle_commitment_request( &self, request: &PreconfRequest) -> PreconfResult  {
+    let digest = request.digest();
+    let recovered_signer = request.signature.recover_address_from_prehash(&digest).map_err(|e|{
+      CommitmentRequestError::Custom("Failed to recover signer from request signature".to_string())
+    })?;
+
+    if recovered_signer != request.sender {
+      tracing::error!("Signer is a not a sender");
+      return Err(CommitmentRequestError::Custom("Invalid signature".to_string()));
+    }
 
     let (response_tx, response_rx) = oneshot::channel();
 
@@ -66,7 +75,62 @@ pub struct PreconfRequest {
   #[serde(deserialize_with = "deserialize_txs", serialize_with = "serialize_txs")]
   pub txs: Vec<Constraint>,
 
+  pub signature: PrimitiveSignature,
+
   pub(crate) sender: Address,
+}
+
+impl PreconfRequest {
+  pub fn digest(&self) -> B256 {
+    let mut data = Vec::new();
+    // First field is the concatenation of all the transaction hashes
+    data.extend_from_slice(
+        &self.txs
+          .iter()
+          .map(|tx| tx.tx.hash().as_slice())
+          .collect::<Vec<_>>()
+          .concat(),
+    );
+    keccak256(data)
+  }
+
+  pub fn gas_limit(&self) -> u64 {
+    self.txs.iter().map(|c| c.tx.gas_limit()).sum()
+  }
+  /// Validates the tx size limit.
+  pub fn validate_tx_size_limit(&self, limit: usize) -> bool {
+    for c in &self.txs {
+        if c.tx.size() > limit {
+            return false;
+        }
+    }
+
+    true
+}
+
+  /// Validates the init code limit.
+  pub fn validate_init_code_limit(&self, limit: usize) -> bool {
+      for c in &self.txs {
+          if c.tx.tx_kind().is_create() && c.tx.input().len() > limit {
+              return false;
+          }
+      }
+
+      true
+  }
+
+  /// Validates the priority fee against the max fee per gas.
+  /// Returns true if the fee is less than or equal to the max fee per gas, false otherwise.
+  /// Ref: https://github.com/paradigmxyz/reth/blob/2d592125128c3742ff97b321884f93f9063abcb2/crates/transaction-pool/src/validate/eth.rs#L242
+  pub fn validate_max_priority_fee(&self) -> bool {
+      for c in &self.txs {
+          if c.tx.max_priority_fee_per_gas() > Some(c.tx.max_fee_per_gas()) {
+              return false;
+          }
+      }
+
+      true
+  }
 }
 
 #[derive(Error, Debug)]

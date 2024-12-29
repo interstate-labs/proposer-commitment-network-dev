@@ -51,6 +51,8 @@ pub struct Config {
     pub keystore_secrets_path: PathBuf,
     /// Path to the keystores folder.
     pub keystore_pubkeys_path: PathBuf,
+   /// Path to the delegations file.
+   pub delegations_path: Option<PathBuf>,
 
 }
 
@@ -71,7 +73,8 @@ impl Default for Config {
             builder_bls_private_key: random_bls_secret(),
             collector_ws: String::new(),
             keystore_secrets_path: PathBuf::from("/work/proposer-commitment-network/sidecar/keystores/secrets"),
-            keystore_pubkeys_path: PathBuf::from("/work/proposer-commitment-network/sidecar/keystores/keys")
+            keystore_pubkeys_path: PathBuf::from("/work/proposer-commitment-network/sidecar/keystores/keys"),
+            delegations_path: None
         }
     }
 }
@@ -111,7 +114,8 @@ impl Config {
             fee_recipient: Address::parse_checksummed(&envs["FEE_RECIPIENT"], None).unwrap() ,
             builder_bls_private_key: random_bls_secret(),
             keystore_secrets_path: PathBuf::from(envs["KEYSTORE_SECRETS_PATH"].as_str()),
-            keystore_pubkeys_path: PathBuf::from(envs["KEYSTORE_PUBKEYS_PATH"].as_str())
+            keystore_pubkeys_path: PathBuf::from(envs["KEYSTORE_PUBKEYS_PATH"].as_str()),
+            delegations_path: { if envs["DELEGATIONS_PATH"].len() > 0 {Some(PathBuf::from(envs["DELEGATIONS_PATH"].as_str()))} else {None} } 
         }
     }
 }

@@ -30,6 +30,7 @@ mod test_utils;
 mod utils;
 mod keystores;
 mod metrics;
+mod delegation;
 
 pub type BLSBytes = FixedBytes<96>;
 pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
@@ -44,7 +45,10 @@ async fn main() {
         .expect("setting default subscriber failed");
 
     // let config = Config::parse_from_cli().unwrap();
-    let envs = read_file("/work/interstate-protocol/proposer-commitment-network/.env").unwrap();
+    tracing::info!("path: {}", env!["CARGO_MANIFEST_DIR"]);
+    let mut env_path = env!["CARGO_MANIFEST_DIR"].to_string();
+    env_path.push_str("/.env");
+    let envs = read_file(env_path).unwrap();
 
     let ( sender, mut receiver ) = mpsc::channel(1024);
     let config = Config::new(envs);
@@ -73,23 +77,23 @@ async fn main() {
 
     let mut fallback_builder = FallbackBuilder::new(&config);
 
-     let ws_stream = match connect_async(config.collector_ws.clone()).await {
-        Ok((stream, response)) => {
-            println!("Handshake for client has been completed");
-            // This will be the HTTP response, same as with server this is the last moment we
-            // can still access HTTP stuff.
-            println!("Server response was {response:?}");
-            stream
-        }
-        Err(e) => {
-            println!("WebSocket handshake for client  failed with {e}!");
-            return;
-        }
-    };
+    //  let ws_stream = match connect_async(config.collector_ws.clone()).await {
+    //     Ok((stream, response)) => {
+    //         println!("Handshake for client has been completed");
+    //         // This will be the HTTP response, same as with server this is the last moment we
+    //         // can still access HTTP stuff.
+    //         println!("Server response was {response:?}");
+    //         stream
+    //     }
+    //     Err(e) => {
+    //         println!("WebSocket handshake for client  failed with {e}!");
+    //         return;
+    //     }
+    // };
 
     tracing::debug!("Connected to the server!");
 
-    let (mut write, mut read) = ws_stream.split();
+    // let (mut write, mut read) = ws_stream.split();
     // let constraint_state_store = constraint_state.write();
     loop {
         tokio::select! {
@@ -126,12 +130,14 @@ async fn main() {
                                 }
                             };
 
-                            // constraint_state.add_constraint(slot, signed_constraints);
+                            ApiMetrics::increment_preconfirmed_transactions_count(tx.tx.tx_type());
+
+                            constraint_state.add_constraint(slot, signed_constraints);
                                     
-                            match commit_boost_api.send_constraints_to_be_collected(&vec![signed_constraints.clone()]).await {
-                                Ok(_) => tracing::info!(?signed_constraints,"Sent constratins successfully to be collected."),
-                                Err(err) => tracing::error!(err = ?err, "Error sending constraints to be collected")
-                            };
+                            // match commit_boost_api.send_constraints_to_be_collected(&vec![signed_constraints.clone()]).await {
+                            //     Ok(_) => tracing::info!(?signed_constraints,"Sent constratins successfully to be collected."),
+                            //     Err(err) => tracing::error!(err = ?err, "Error sending constraints to be collected")
+                            // };
 
                             let response = serde_json::to_value( PreconfResponse { ok: true}).map_err(Into::into);
                             let _ = res.send(response).ok();
@@ -178,14 +184,14 @@ async fn main() {
                     tracing::debug!("Sent payload and bid to response channel");
                 }
             },
-            Some(Ok(msg)) = read.next() => {
-                if let tokio_tungstenite::tungstenite::protocol::Message::Text(text) = msg {
-                    let merged_constraints: Vec<SignedConstraints> = serde_json::from_str(text.as_str()).unwrap();
+            // Some(Ok(msg)) = read.next() => {
+            //     if let tokio_tungstenite::tungstenite::protocol::Message::Text(text) = msg {
+            //         let merged_constraints: Vec<SignedConstraints> = serde_json::from_str(text.as_str()).unwrap();
         
-                    tracing::debug!("Received {} merged constraints", merged_constraints.len());
-                    constraint_state.replace_constraints(merged_constraints[0].message.slot, &merged_constraints);
-                }
-            }, 
+            //         tracing::debug!("Received {} merged constraints", merged_constraints.len());
+            //         constraint_state.replace_constraints(merged_constraints[0].message.slot, &merged_constraints);
+            //     }
+            // }, 
             Ok(HeadEvent { slot, .. }) = head_event_listener.next_head() => {
                 tracing::info!(slot, "Got received a new head event");
 

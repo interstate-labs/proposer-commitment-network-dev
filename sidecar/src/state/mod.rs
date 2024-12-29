@@ -1,12 +1,9 @@
 use std::{
-  collections::HashMap,
-  pin::Pin,
-  task::{Context, Poll},
-  time::{Duration, Instant}
+  collections::HashMap, num::NonZero, pin::Pin, task::{Context, Poll}, time::{Duration, Instant}
 };
 
 use beacon_api_client::{mainnet::Client, BlockId, ProposerDuty};
-use alloy::rpc::types::beacon::events::HeadEvent;
+use alloy::{primitives::U256, rpc::types::beacon::events::HeadEvent};
 use beacon_api_client::Topic;
 use futures::StreamExt;
 use tokio::{sync::broadcast, task::AbortHandle};
@@ -16,7 +13,7 @@ use tokio::time::Sleep;
 
 use ethereum_consensus::{crypto::PublicKey as ECBlsPublicKey, deneb:: { BeaconBlockHeader, mainnet::{Blob, BlobsBundle} }, crypto::{KzgCommitment, KzgProof}, phase0::mainnet::SLOTS_PER_EPOCH};
 
-use crate::constraints::{SignedConstraints, TransactionExt};
+use crate::{commitment::request, constraints::{SignedConstraints, TransactionExt}, metrics::ApiMetrics};
 use crate::commitment::request::PreconfRequest;
 use crate::config::ValidatorIndexes;
 
@@ -32,6 +29,8 @@ pub enum StateError {
   FailedFetcingProposerDuties,
   #[error("Beacon API error: {0}")]
   BeaconApiError(#[from] beacon_api_client::Error),
+  #[error("{0}")]
+  Custom(String)
 }
 
 #[derive(Debug, Default)]
@@ -51,6 +50,12 @@ pub struct ConstraintState {
   pub current_epoch: Epoch,
   pub header: BeaconBlockHeader,
   pub validator_indexes: ValidatorIndexes,
+  pub max_commitments_in_block: usize,
+  pub max_commitment_gas : NonZero<u64>,
+  pub min_priority_fee: u128,
+  pub block_gas_limit: u64,
+  pub max_tx_input_bytes: usize,
+  pub max_init_code_byte_size: usize,
 
   pub beacon_client: Client
 }
@@ -67,6 +72,12 @@ impl ConstraintState {
       validator_indexes,
       beacon_client,
       header: BeaconBlockHeader::default(),
+      max_commitments_in_block: 128,
+      max_commitment_gas : NonZero::new(10_000_000).unwrap(),
+      min_priority_fee: 1_000_000_000,
+      block_gas_limit: 30_000_000,
+      max_tx_input_bytes: 4 * 32 * 1024,
+      max_init_code_byte_size: 2 * 24576,
     }
   }
   
@@ -115,6 +126,51 @@ impl ConstraintState {
     // Find the validator publickey for the given slot
     let public_key = self.find_validator_pubkey_for_slot(request.slot)?;
 
+    // Check if there is room for more commitments
+    if let Some(block) = self.blocks.get(&request.slot) {
+        if block.transactions_count() >= self.max_commitments_in_block {
+            return Err(StateError::Custom("Overflow commitments amount".to_string()));
+        }
+    }
+
+    // Check if the committed gas exceeds the maximum
+    let template_committed_gas =
+    self.blocks.get(&request.slot).map(|t| t.committed_gas()).unwrap_or(0);
+
+    if template_committed_gas + request.gas_limit() >= self.max_commitment_gas.into()
+    {
+        return Err(StateError::Custom("Overflow gas limit".to_string()));
+    }
+
+    // Check if the transaction size exceeds the maximum
+    if !request.validate_tx_size_limit(self.max_tx_input_bytes) {
+        return Err(StateError::Custom("Overflow transaction size in input bytes".to_string()));
+    }
+
+    // Check if the transaction is a contract creation and the init code size exceeds the
+    // maximum
+    if !request.validate_init_code_limit(self.max_init_code_byte_size) {
+        return Err(StateError::Custom("Overflow transaction size in code bytes".to_string()));            }
+
+    // Check if the gas limit is higher than the maximum block gas limit
+    if request.gas_limit() > self.block_gas_limit {
+        return Err(StateError::Custom("Overflow gas limit".to_string()));
+    }
+
+    // Ensure max_priority_fee_per_gas is less than max_fee_per_gas
+    if !request.validate_max_priority_fee() {
+        return Err(StateError::Custom("Overflow transaction priority fee".to_string()));
+    }
+
+    // Check if the max_fee_per_gas would cover the maximum possible basefee.
+    let slot_diff = request.slot.saturating_sub(self.latest_slot);
+
+    // TODO: Calculate the max possible basefee given the slot diff.
+    if request.slot < self.latest_slot {
+        return Err(StateError::Custom("Target slot is passed already".to_string()));
+
+    }
+
     Ok(public_key)
   }
 
@@ -152,6 +208,7 @@ impl ConstraintState {
     self.latest_slot = head;
 
     let slot = self.header.slot;
+    ApiMetrics::set_latest_head(slot as u32);
     let epoch = slot / SLOTS_PER_EPOCH;
 
     self.blocks.remove(&slot);
@@ -184,11 +241,12 @@ impl Block {
   pub fn remove_constraints( &mut self, slot: u64){
     self.signed_constraints_list.remove(slot.try_into().unwrap());
   }
+
   
   pub fn get_transactions(&self) -> Vec<PooledTransactionsElement> {
     self.signed_constraints_list
         .iter()
-        .flat_map(|sc| sc.message.constraints.iter().map(|c| c.transaction.clone()))
+        .flat_map(|sc| sc.message.transactions.iter().map(|c| c.tx.clone()))
         .collect()
   }
   
@@ -197,9 +255,9 @@ impl Block {
         .iter()
         .flat_map(|sc| {
             sc.message
-                .constraints
+                .transactions
                 .iter()
-                .map(|c| c.transaction.clone().into_transaction())
+                .map(|c| c.tx.clone().into_transaction())
         })
         .collect()
  }
@@ -208,8 +266,8 @@ impl Block {
     let (commitments, proofs, blobs) =
         self.signed_constraints_list
             .iter()
-            .flat_map(|sc| sc.message.constraints.iter())
-            .filter_map(|c| c.transaction.blob_sidecar())
+            .flat_map(|sc| sc.message.transactions.iter())
+            .filter_map(|c| c.tx.blob_sidecar())
             .fold(
                 (Vec::new(), Vec::new(), Vec::new()),
                 |(mut commitments, mut proofs, mut blobs), bs| {
@@ -234,6 +292,17 @@ impl Block {
         blobs,
     }
  }
+
+ pub fn transactions_count(&self) -> usize {
+    self.signed_constraints_list.len()
+ }
+ 
+ pub fn committed_gas(&self) -> u64 {
+    self.signed_constraints_list.iter().fold(0, |acc, sc| {
+        acc + sc.message.transactions.iter().fold(0, |acc, c| acc + c.tx.gas_limit())
+    })
+}
+
 }
 
 
