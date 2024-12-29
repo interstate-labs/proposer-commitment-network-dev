@@ -1,6 +1,7 @@
 use alloy::{primitives::FixedBytes, rpc::types::beacon::events::HeadEvent};
 use ethereum_consensus::deneb::compute_signing_root;
 use futures::StreamExt;
+use metrics::{run_metrics_server, ApiMetrics};
 use parking_lot::RwLock;
 use rand::RngCore;
 use state::{ ConstraintState, HeadEventListener };
@@ -28,6 +29,7 @@ mod config;
 mod test_utils;
 mod utils;
 mod keystores;
+mod metrics;
 
 pub type BLSBytes = FixedBytes<96>;
 pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
@@ -48,6 +50,9 @@ async fn main() {
     let config = Config::new(envs);
 
     let keystores = Keystores::new(&config.keystore_pubkeys_path, &config.keystore_secrets_path, &config.chain);
+
+    let _ = run_metrics_server(config.metrics_port);
+
 
     run_commitment_rpc_server(sender, &config).await;
 
@@ -90,6 +95,8 @@ async fn main() {
         tokio::select! {
             Some( CommitmentRequestEvent{req, res} ) = receiver.recv() => {
                 tracing::info!("Received preconfirmation request");
+                ApiMetrics::increment_received_commitments_count();
+
                 let slot = req.slot;
                 let pubkeys = keystores.get_pubkeys();
 
@@ -132,6 +139,7 @@ async fn main() {
                         // }                  
                     },
                     Err(err) => {
+                        ApiMetrics::increment_validation_errors_count("validation error".to_string());
                         tracing::error!(?err, "No available vaildators");
                     }
                 };
