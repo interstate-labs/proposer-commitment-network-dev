@@ -13,7 +13,7 @@ use tokio::time::Sleep;
 
 use ethereum_consensus::{crypto::PublicKey as ECBlsPublicKey, deneb:: { BeaconBlockHeader, mainnet::{Blob, BlobsBundle} }, crypto::{KzgCommitment, KzgProof}, phase0::mainnet::SLOTS_PER_EPOCH};
 
-use crate::{commitment::request, constraints::{SignedConstraints, TransactionExt}};
+use crate::{commitment::request, constraints::{SignedConstraints, TransactionExt}, metrics::ApiMetrics};
 use crate::commitment::request::PreconfRequest;
 use crate::config::ValidatorIndexes;
 
@@ -208,6 +208,7 @@ impl ConstraintState {
     self.latest_slot = head;
 
     let slot = self.header.slot;
+    ApiMetrics::set_latest_head(slot as u32);
     let epoch = slot / SLOTS_PER_EPOCH;
 
     self.blocks.remove(&slot);

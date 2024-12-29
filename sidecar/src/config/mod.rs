@@ -16,11 +16,15 @@ pub const DEFAULT_COMMITMENT_PORT: u16 = 8000;
 /// Default port for the MEV-Boost proxy server.
 pub const DEFAULT_MEV_BOOST_PROXY_PORT: u16 = 18551;
 
+pub const DEFAULT_METRICS_PORT: u16 = 8018;
+
 /// Configuration of the sidecar.
 #[derive(Debug, Clone)]
 pub struct Config {
     /// Port to listen on for incoming commitment requests
     pub commitment_port: u16,
+    /// Port to listen on for incoming commitment requests
+    pub metrics_port: u16,
     /// The builder server port to listen on (handling constraints apis)
     pub builder_port: u16,
     /// The constraints collector url
@@ -57,6 +61,7 @@ impl Default for Config {
         Self {
             commitment_port: DEFAULT_COMMITMENT_PORT,
             builder_port: DEFAULT_MEV_BOOST_PROXY_PORT,
+            metrics_port:DEFAULT_METRICS_PORT,
             collector_url: "http://localhost:3030".parse().expect("Valid URL"),
             beacon_api_url: "http://localhost:5052".parse().expect("Valid URL"),
             execution_api_url: "http://localhost:8545".parse().expect("Valid URL"),
@@ -96,6 +101,7 @@ impl Config {
 
         Self {
             commitment_port: envs["COMMITMENT_PORT"].parse().unwrap(),
+            metrics_port: envs["METRICS_PORT"].parse().unwrap(),
             builder_port: envs["BUILDER_PORT"].parse().unwrap(),
             collector_url: envs["COLLECTOR_URL"].parse().expect("Valid URL"),
             collector_ws:envs["COLLECTOR_SOCKET"].parse().expect("Valid URL"),
