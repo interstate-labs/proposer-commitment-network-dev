@@ -42,6 +42,10 @@ pub enum BuilderApiError {
     InvalidParams(String),
     #[error("Signature Verification Failed: {0}")]
     SignatureVerificationFailed(String),
+    #[error("Env error: {0}")]
+    ENVError(String),
+    #[error("JWT error: {0}")]
+    JWTError(String)
 }
 
 impl IntoResponse for BuilderApiError {
@@ -91,6 +95,12 @@ impl IntoResponse for BuilderApiError {
             }
             BuilderApiError::SignatureVerificationFailed(err) => {
                 (StatusCode::UNAUTHORIZED, Json(err)).into_response()
+            }
+            BuilderApiError::ENVError(err) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(err)).into_response()
+            }
+            BuilderApiError::JWTError(err) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(err)).into_response()
             }
             BuilderApiError::FailedJoinningInExtender(err) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, Json(err)).into_response()

@@ -1120,13 +1120,17 @@ dependencies = [
  "alloy",
  "axum",
  "axum-server",
+ "chrono",
+ "dotenv",
  "env-file-reader",
  "ethereum-consensus",
  "ethers",
  "eyre",
  "futures",
  "hex",
+ "http 1.2.0",
  "http-body-util",
+ "jsonwebtoken 9.3.0",
  "reqwest 0.12.11",
  "serde",
  "serde_json",
@@ -1256,8 +1260,10 @@ checksum = "7e36cc9d416881d2e24f9a963be5fb1cd90966419ac844274161d10488b3e825"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-targets 0.52.6",
 ]
 
@@ -1685,6 +1691,12 @@ name = "doctest-file"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aac81fa3e28d21450aa4d2ac065992ba96a1d7303efbce51a95f4fd175b67562"
+
+[[package]]
+name = "dotenv"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
 
 [[package]]
 name = "dunce"

@@ -2,7 +2,7 @@ use std::{sync::Arc, net::SocketAddr};
 
 use axum::{extract::{Path, State}, middleware, response::Html, routing::{ get, post }, Json, Router};
 
-use crate::{auth::{auth_handler, auth_response}, builder::{ GetHeaderParams, GetPayloadResponse, SignedBuilderBid, VersionedValue}, error::BuilderApiError};
+use crate::{auth::{auth_response, jwt_auth_handler, signature_auth_handler, whitelisted_route}, builder::{ GetHeaderParams, GetPayloadResponse, SignedBuilderBid, VersionedValue}, error::BuilderApiError};
 use ethereum_consensus::{
   builder::SignedValidatorRegistration, deneb::mainnet::SignedBlindedBeaconBlock
 };
@@ -22,7 +22,8 @@ pub async fn run_builder_extend_modular(port: u16, urls:Vec<String>) {
       .route(GET_HEADER_PATH, get(get_header))
       .route(GET_PAYLOAD_PATH, post(get_payload))
       .with_state(extender)
-      .route("/auth_route", post(auth_response).layer(middleware::from_fn(auth_handler)));
+      .route("/auth_route", post(auth_response).layer(middleware::from_fn(signature_auth_handler)))
+      .route("/protected_route", get(whitelisted_route).layer(middleware::from_fn(jwt_auth_handler)));
 
     //TODO: replace a port
     let addr: SocketAddr = SocketAddr::from(([0,0,0,0], port));
