@@ -51,8 +51,10 @@ pub struct Config {
     pub keystore_secrets_path: PathBuf,
     /// Path to the keystores folder.
     pub keystore_pubkeys_path: PathBuf,
-   /// Path to the delegations file.
-   pub delegations_path: Option<PathBuf>,
+    /// Path to the delegations file.
+    pub delegations_path: Option<PathBuf>,
+    /// Gateway contract address
+    pub gateway_contract: Address
 
 }
 
@@ -74,7 +76,8 @@ impl Default for Config {
             collector_ws: String::new(),
             keystore_secrets_path: PathBuf::from("/work/proposer-commitment-network/sidecar/keystores/secrets"),
             keystore_pubkeys_path: PathBuf::from("/work/proposer-commitment-network/sidecar/keystores/keys"),
-            delegations_path: None
+            delegations_path: None,
+            gateway_contract: Address::from_str("0x8aC112a5540f441cC9beBcC647041A6E0D595B94").unwrap(),
         }
     }
 }
@@ -115,7 +118,8 @@ impl Config {
             builder_bls_private_key: random_bls_secret(),
             keystore_secrets_path: PathBuf::from(envs["KEYSTORE_SECRETS_PATH"].as_str()),
             keystore_pubkeys_path: PathBuf::from(envs["KEYSTORE_PUBKEYS_PATH"].as_str()),
-            delegations_path: { if envs["DELEGATIONS_PATH"].len() > 0 {Some(PathBuf::from(envs["DELEGATIONS_PATH"].as_str()))} else {None} } 
+            delegations_path: { if envs["DELEGATIONS_PATH"].len() > 0 {Some(PathBuf::from(envs["DELEGATIONS_PATH"].as_str()))} else {None} },
+            gateway_contract: envs["GATEWAY_CONTRACT"].parse().unwrap()
         }
     }
 }

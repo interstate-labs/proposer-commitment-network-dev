@@ -31,6 +31,7 @@ mod utils;
 mod keystores;
 mod metrics;
 mod delegation;
+mod onchain;
 
 pub type BLSBytes = FixedBytes<96>;
 pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";

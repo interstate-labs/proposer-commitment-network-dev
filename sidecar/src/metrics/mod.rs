@@ -125,17 +125,7 @@ impl ApiMetrics {
     }
 }
 
-pub fn run_metrics_server(metrics_port: u16) -> Result<()> {
-  let std_layer = FmtLayer::default().with_writer(std::io::stdout).with_filter(
-      EnvFilter::builder()
-          .with_default_directive("bolt_sidecar=info".parse()?)
-          .from_env_lossy()
-          .add_directive("reqwest=error".parse()?)
-          .add_directive("alloy_transport_http=error".parse()?),
-  );
-
-  Registry::default().with(std_layer).try_init()?;
-  
+pub fn run_metrics_server(metrics_port: u16) -> Result<()> {  
     let prometheus_addr = SocketAddr::from(([0, 0, 0, 0], metrics_port));
     let builder = PrometheusBuilder::new().with_http_listener(prometheus_addr);
 
