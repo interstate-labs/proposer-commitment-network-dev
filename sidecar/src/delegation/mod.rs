@@ -39,25 +39,25 @@ pub enum DelegationMessageType {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DelegationMessage {
-  pub message_type: u8,
+  pub action: u8,
   pub validator_pubkey: BlsPublicKey,
-  pub target_pubkey: BlsPublicKey
+  pub delegatee_pubkey: BlsPublicKey
 }
 
 impl DelegationMessage {
-  pub fn new(validator_pubkey: BlsPublicKey, target_pubkey: BlsPublicKey) -> Self {
+  pub fn new(validator_pubkey: BlsPublicKey, delegatee_pubkey: BlsPublicKey) -> Self {
     DelegationMessage {
-      message_type: DelegationMessageType::Delegation as u8,
+      action: DelegationMessageType::Delegation as u8,
       validator_pubkey,
-      target_pubkey
+      delegatee_pubkey
     }
   }
 
   pub fn digest(&self) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    hasher.update([self.message_type]);
+    hasher.update([self.action]);
     hasher.update(self.validator_pubkey.to_vec());
-    hasher.update(self.target_pubkey.to_vec());
+    hasher.update(self.delegatee_pubkey.to_vec());
     let result = hasher.finalize().into();
     result
   }

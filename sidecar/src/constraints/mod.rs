@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, net::SocketAddr, str::FromStr, sync::Arc};
+use std::{borrow::Cow, collections::{HashMap, HashSet}, net::SocketAddr, str::FromStr, sync::Arc};
 
 use alloy::{
     hex, 
@@ -303,6 +303,24 @@ impl CommitBoostApi {
             return Err(CommitBoostError::FailedRegisteringValidators(error));
         }
 
+        if self.delegations.is_empty() {
+            return Ok(());
+        } else {
+            let validator_pubkeys =
+                registrations.iter().map(|r| &r.message.public_key).collect::<HashSet<_>>();
+
+            let filtered_delegations = self
+                .delegations
+                .iter()
+                .filter(|d| validator_pubkeys.contains(&d.message.validator_pubkey))
+                .cloned()
+                .collect::<Vec<_>>();
+
+            if let Err(err) = self.delegate(&filtered_delegations).await {
+                tracing::error!(?err, "Failed to propagate delegations during validator registration");
+            }
+        }
+
         Ok(())
     }
 
@@ -375,12 +393,12 @@ impl CommitBoostApi {
             .await?;
 
         // let response_text = response.clone().text().await?;
-        tracing::info!("response status: {}", response.status());
+        // tracing::info!("response status: {}", response.status());
 
-        // if response.status() != StatusCode::OK {
-        //     let error = response.json::<ErrorResponse>().await?;
-        //     return Err(CommitBoostError::FailedSubmittingConstraints(error));
-        // }
+        if response.status() != StatusCode::OK {
+            let error = response.json::<ErrorResponse>().await?;
+            return Err(CommitBoostError::FailedSubmittingConstraints(error));
+        }
 
         Ok(())
     }
