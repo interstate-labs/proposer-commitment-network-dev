@@ -115,8 +115,7 @@ async fn main() {
 
                         // TODO::Validate preconfirmation request      
 
-                        // for tx in req.txs.iter() {
-                            let tx = req.txs[0].clone();
+                        for tx in req.txs.iter() {
                             let message =
                                 ConstraintsMessage::from_tx(pubkey.clone(), slot, tx.clone());
                             let digest = message.digest();
@@ -138,12 +137,11 @@ async fn main() {
                             // match commit_boost_api.send_constraints_to_be_collected(&vec![signed_constraints.clone()]).await {
                             //     Ok(_) => tracing::info!(?signed_constraints,"Sent constratins successfully to be collected."),
                             //     Err(err) => tracing::error!(err = ?err, "Error sending constraints to be collected")
-                            // };
+                            // };                            
 
-                            let response = serde_json::to_value( PreconfResponse { ok: true}).map_err(Into::into);
-                            let _ = res.send(response).ok();
-
-                        // }                  
+                        }        
+                        let response = serde_json::to_value( PreconfResponse { ok: true}).map_err(Into::into);
+                        let _ = res.send(response).ok();          
                     },
                     Err(err) => {
                         ApiMetrics::increment_validation_errors_count("validation error".to_string());

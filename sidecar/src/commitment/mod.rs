@@ -35,30 +35,40 @@ pub async fn run_commitment_rpc_server ( event_sender: mpsc::Sender<CommitmentRe
 
 #[debug_handler]
 async fn handle_preconfirmation (insecure_ip: InsecureClientIp, secure_ip: SecureClientIp, State(handler):State<Arc<CommitmentRequestHandler>>, Json(body):Json<PreconfRequest>) -> Result<Json<PreconfResponse>, CommitmentRequestError>{
+  match handler.handle_commitment_request(&body).await {
+    Ok(_) => {
+      let response = PreconfResponse {
+        ok: true
+      };
+    
+      return Ok(Json(response))
+    },
+    Err(e)=> return Err(e)
+  };
   
-  let client_ip = insecure_ip.0.to_string();
-  match handler.verify_ip(client_ip.clone()).await{
-    Ok(validity) => {
-      if validity {
-        match handler.handle_commitment_request(&body).await {
-          Ok(_) => {
-            let response = PreconfResponse {
-              ok: true
-            };
+  // let client_ip = insecure_ip.0.to_string();
+  // match handler.verify_ip(client_ip.clone()).await{
+  //   Ok(validity) => {
+  //     if validity {
+  //       match handler.handle_commitment_request(&body).await {
+  //         Ok(_) => {
+  //           let response = PreconfResponse {
+  //             ok: true
+  //           };
           
-            return Ok(Json(response))
-          },
-          Err(e)=> return Err(e)
-        };
-      }else{
-        tracing::warn!("Received preconf request from not allowed ip {}", client_ip.clone());
-        return Err(CommitmentRequestError::NotAllowedIP(client_ip));
-      }
-    }
-    Err(err) => {
-      return Err(CommitmentRequestError::Custom(err.to_string()));
-    }
-  }
+  //           return Ok(Json(response))
+  //         },
+  //         Err(e)=> return Err(e)
+  //       };
+  //     }else{
+  //       tracing::warn!("Received preconf request from not allowed ip {}", client_ip.clone());
+  //       return Err(CommitmentRequestError::NotAllowedIP(client_ip));
+  //     }
+  //   }
+  //   Err(err) => {
+  //     return Err(CommitmentRequestError::Custom(err.to_string()));
+  //   }
+  // }
   
   
 
