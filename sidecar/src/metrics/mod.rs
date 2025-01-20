@@ -4,10 +4,6 @@ use std::net::SocketAddr;
 use eyre::{bail, Result};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use tracing::info;
-use tracing_subscriber::{
-    fmt::Layer as FmtLayer, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer,
-    Registry,
-};
 
 use metrics::{counter, describe_counter, describe_gauge, describe_histogram, gauge, histogram};
 use reth_primitives::TxType;

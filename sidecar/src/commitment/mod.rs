@@ -3,9 +3,7 @@ use std::{net::SocketAddr, sync::Arc, time::Instant};
 use axum::{debug_handler, extract::{Request, State}, http::StatusCode, middleware::{self, Next}, response::IntoResponse, routing::post, Json, Router};
 use serde::Serialize;
 use axum_client_ip::{InsecureClientIp, SecureClientIp, SecureClientIpSource};
-
-use serde_json::Value;
-use tokio::sync::{mpsc::{self, Sender, Receiver}, oneshot};
+use tokio::sync::mpsc;
 
 use crate::{commitment::request::{CommitmentRequestError, CommitmentRequestEvent, CommitmentRequestHandler, PreconfRequest}, metrics::ApiMetrics};
 use crate::config::Config;
@@ -34,7 +32,8 @@ pub async fn run_commitment_rpc_server ( event_sender: mpsc::Sender<CommitmentRe
 }
 
 #[debug_handler]
-async fn handle_preconfirmation (insecure_ip: InsecureClientIp, secure_ip: SecureClientIp, State(handler):State<Arc<CommitmentRequestHandler>>, Json(body):Json<PreconfRequest>) -> Result<Json<PreconfResponse>, CommitmentRequestError>{
+// async fn handle_preconfirmation (insecure_ip: InsecureClientIp, secure_ip: SecureClientIp, State(handler):State<Arc<CommitmentRequestHandler>>, Json(body):Json<PreconfRequest>) -> Result<Json<PreconfResponse>, CommitmentRequestError>{
+async fn handle_preconfirmation (State(handler):State<Arc<CommitmentRequestHandler>>, Json(body):Json<PreconfRequest>) -> Result<Json<PreconfResponse>, CommitmentRequestError>{  
   match handler.handle_commitment_request(&body).await {
     Ok(_) => {
       let response = PreconfResponse {

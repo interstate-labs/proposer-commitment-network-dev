@@ -3,7 +3,7 @@ use std::{
 };
 
 use beacon_api_client::{mainnet::Client, BlockId, ProposerDuty};
-use alloy::{primitives::U256, rpc::types::beacon::events::HeadEvent};
+use alloy::rpc::types::beacon::events::HeadEvent;
 use beacon_api_client::Topic;
 use futures::StreamExt;
 use tokio::{sync::broadcast, task::AbortHandle};
@@ -13,7 +13,7 @@ use tokio::time::Sleep;
 
 use ethereum_consensus::{crypto::PublicKey as ECBlsPublicKey, deneb:: { BeaconBlockHeader, mainnet::{Blob, BlobsBundle} }, crypto::{KzgCommitment, KzgProof}, phase0::mainnet::SLOTS_PER_EPOCH};
 
-use crate::{commitment::request, constraints::{SignedConstraints, TransactionExt}, metrics::ApiMetrics};
+use crate::{constraints::{SignedConstraints, TransactionExt}, metrics::ApiMetrics};
 use crate::commitment::request::PreconfRequest;
 use crate::config::ValidatorIndexes;
 
@@ -163,7 +163,7 @@ impl ConstraintState {
     }
 
     // Check if the max_fee_per_gas would cover the maximum possible basefee.
-    let slot_diff = request.slot.saturating_sub(self.latest_slot);
+    let _slot_diff = request.slot.saturating_sub(self.latest_slot);
 
     // TODO: Calculate the max possible basefee given the slot diff.
     if request.slot < self.latest_slot {

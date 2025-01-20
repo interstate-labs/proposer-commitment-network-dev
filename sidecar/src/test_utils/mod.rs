@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env};
+use std::collections::HashMap;
 
 use alloy::{
     network::TransactionBuilder,
@@ -13,6 +13,7 @@ pub(crate) fn get_test_config() -> Config {
     let mut envs = HashMap::new();
     
     envs.insert("COMMITMENT_PORT".to_string(), "9063".to_string());
+    envs.insert("METRICS_PORT".to_string(), "8018".to_string());
     envs.insert("CHAIN".to_string(), "kurtosis".to_string());
     envs.insert("VALIDATOR_INDEXES".to_string(), "0..64".to_string());
     envs.insert("BEACON_API_URL".to_string(), "http://127.0.0.1:36477".to_string());
@@ -27,6 +28,8 @@ pub(crate) fn get_test_config() -> Config {
     envs.insert("FEE_RECIPIENT".to_string(), "0x8aC112a5540f441cC9beBcC647041A6E0D595B94".to_string());
     envs.insert("KEYSTORE_SECRETS_PATH".to_string(), "/work/proposer-commitment-network/sidecar/keystores/secrets".to_string());
     envs.insert("KEYSTORE_PUBKEYS_PATH".to_string(), "/work/proposer-commitment-network/sidecar/keystores/keys".to_string());
+    envs.insert("DELEGATIONS_PATH".to_string(), "/work/proposer-commitment-network/sidecar/delegations/delegations.json".to_string());
+    envs.insert("GATEWAY_CONTRACT".to_string(), "0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009".to_string());
     
     Config::new(envs)
 }

@@ -583,14 +583,13 @@ pub(crate) fn to_byte_vector(value: Bloom) -> ByteVector<256> {
 #[cfg(test)]
 mod tests {
     use alloy::{
-        eips::eip2718::Encodable2718, network::{EthereumWallet, TransactionBuilder}, primitives::{hex, keccak256, Address, PrimitiveSignature}, signers::{k256::ecdsa::SigningKey, local::PrivateKeySigner, Signer}
+        eips::eip2718::Encodable2718, network::{EthereumWallet, TransactionBuilder}, primitives::{hex, keccak256, Address}, signers::{k256::ecdsa::SigningKey, local::PrivateKeySigner, Signer}
     };
 
     use ethereum_consensus::crypto::PublicKey as ECBlsPublicKey;
-    use reth_primitives::PooledTransactionsElement;
     use crate::{constraints::Constraint, utils::create_random_bls_secretkey};    
     use crate::{
-        commitment::request::PreconfRequest, constraints::{builder::FallbackBuilder, ConstraintsMessage, SignedConstraints}, state::Block, test_utils::{default_test_transaction, get_test_config}, BLSBytes, BLS_DST_PREFIX
+        commitment::request::PreconfRequest, constraints::{ConstraintsMessage, SignedConstraints}, state::Block, test_utils::{default_test_transaction, get_test_config}, BLSBytes, BLS_DST_PREFIX
     };
 
     #[tokio::test]

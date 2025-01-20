@@ -5,8 +5,7 @@ use alloy::{
   sol,
   transports::http::Http,
 };
-use ethereum_consensus::primitives::BlsPublicKey;
-use eyre::{bail, Context};
+use eyre::bail;
 use reqwest::{Client, Url};
 use serde::Serialize;
 
@@ -26,7 +25,7 @@ impl GatewayController {
   pub async fn check_ip(&self, ip: String) -> eyre::Result<bool>  {
     let data =  match self.0.getGatewayIPs().call().await {
       Ok(content) => content,
-      Err(err) => bail!("Failed to fetch a whitelist from a contract")
+      Err(_err) => bail!("Failed to fetch a whitelist from a contract")
     };
     Ok(data.whitelist.contains(&ip))
   }

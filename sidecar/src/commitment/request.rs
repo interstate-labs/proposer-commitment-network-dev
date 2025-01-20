@@ -1,11 +1,10 @@
 use std::{num::NonZeroUsize, str::FromStr, sync::Arc};
 use parking_lot::RwLock;
-use alloy::{ eips::eip2718::{Decodable2718, Encodable2718}, hex, primitives::{keccak256, Address, PrimitiveSignature, B256}};
+use alloy::{hex, primitives::{keccak256, Address, PrimitiveSignature, B256}};
 use reqwest::Url;
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use serde::{de, Deserialize, Deserializer, Serialize};
-use reth_primitives::{PooledTransactionsElement};
 use thiserror::Error;
 
 use crate::constraints::{deserialize_txs, serialize_txs, Constraint, TransactionExt};
@@ -37,7 +36,7 @@ impl CommitmentRequestHandler{
 
   pub async fn handle_commitment_request( &self, request: &PreconfRequest) -> PreconfResult  {
     let digest = request.digest();
-    let recovered_signer = request.signature.recover_address_from_prehash(&digest).map_err(|e|{
+    let recovered_signer = request.signature.recover_address_from_prehash(&digest).map_err(|_e|{
       CommitmentRequestError::Custom("Failed to recover signer from request signature".to_string())
     })?;
 

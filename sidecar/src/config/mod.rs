@@ -168,6 +168,7 @@ mod tests {
         let mut envs = HashMap::new();
         envs.insert("COMMITMENT_PORT".to_string(), "8001".to_string());
         envs.insert("BUILDER_PORT".to_string(), "18552".to_string());
+        envs.insert("METRICS_PORT".to_string(), "8018".to_string());
         envs.insert("COLLECTOR_URL".to_string(), "http://localhost:4000".to_string());
         envs.insert("COLLECTOR_SOCKET".to_string(), "ws://localhost:4001".to_string());
         envs.insert("BEACON_API_URL".to_string(), "http://localhost:6000".to_string());
@@ -181,11 +182,14 @@ mod tests {
         envs.insert("FEE_RECIPIENT".to_string(), "0x0000000000000000000000000000000000000001".to_string());
         envs.insert("KEYSTORE_SECRETS_PATH".to_string(), "/work/proposer-commitment-network/sidecar/keystores/secrets".to_string());
         envs.insert("KEYSTORE_PUBKEYS_PATH".to_string(), "/work/proposer-commitment-network/sidecar/keystores/keys".to_string());
+        envs.insert("DELEGATIONS_PATH".to_string(), "/work/proposer-commitment-network/sidecar/delegations/delegations.json".to_string());
+        envs.insert("GATEWAY_CONTRACT".to_string(), "0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009".to_string());
 
         let config = Config::new(envs);
 
         assert_eq!(config.commitment_port, 8001);
         assert_eq!(config.builder_port, 18552);
+        assert_eq!(config.metrics_port, 8018);
         assert_eq!(config.collector_url.as_str(), "http://localhost:4000/");
         assert_eq!(config.collector_ws, "ws://localhost:4001");
         assert_eq!(config.beacon_api_url.as_str(), "http://localhost:6000/");

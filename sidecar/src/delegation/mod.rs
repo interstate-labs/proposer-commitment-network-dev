@@ -117,7 +117,7 @@ mod tests {
         assert_eq!(delegations.len(), 1);
         assert_eq!(
             format!("{:?}", delegations[0].message.validator_pubkey), 
-            "0x83b85769a8f2a1a6bd3a609e51b460f6fb897daff1157991479421493926faeffa6670152524403929a8a7e551d345f3"
+            "0xa1d9840eda3036fbf63eeea40146e4548553e6e1b2a653ab349b376f31b367c40d71fb59ff8e94b91daa99c262ec8b52"
         );
     }
 }

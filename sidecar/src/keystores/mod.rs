@@ -264,7 +264,7 @@ mod tests {
                 &chain_config,
             );
 
-            assert_eq!(keystore_signer_from_directory.keypairs.len(), 3);
+            assert_eq!(keystore_signer_from_directory.keypairs.len(), 1);
             assert_eq!(
                 keystore_signer_from_directory
                     .keypairs

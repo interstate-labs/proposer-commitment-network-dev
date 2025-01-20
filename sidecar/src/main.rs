@@ -1,17 +1,9 @@
 use alloy::{primitives::FixedBytes, rpc::types::beacon::events::HeadEvent};
-use ethereum_consensus::deneb::compute_signing_root;
-use futures::StreamExt;
 use metrics::{run_metrics_server, ApiMetrics};
-use parking_lot::RwLock;
-use rand::RngCore;
 use state::{ ConstraintState, HeadEventListener };
 use tokio::sync::mpsc;
-use tokio_tungstenite::{connect_async, tungstenite::client::IntoClientRequest};
 use commitment::request::CommitmentRequestEvent;
 use tracing_subscriber::fmt::Subscriber;
-use blst::min_pk::SecretKey;
-use utils::create_random_bls_secretkey;
-use std::{collections::HashMap, sync::Arc};
 pub use beacon_api_client::mainnet::Client;
 
 use env_file_reader::read_file;
@@ -19,7 +11,7 @@ use env_file_reader::read_file;
 use constraints::{run_constraints_proxy_server, ConstraintsMessage, FallbackBuilder, FallbackPayloadFetcher, FetchPayloadRequest, SignedConstraints, TransactionExt };
 use commitment::{run_commitment_rpc_server, PreconfResponse};
 use config::Config;
-use keystores::{BLSSig, Keystores};
+use keystores::Keystores;
 
 mod commitment;
 mod state;
@@ -72,8 +64,6 @@ async fn main() {
     let mut constraint_state = ConstraintState::new( beacon_client.clone(), config.validator_indexes.clone(), config.chain.get_commitment_deadline_duration()) ;
 
    
-    let signer_key = create_random_bls_secretkey();
-
     let mut head_event_listener = HeadEventListener::run(beacon_client);
 
     let mut fallback_builder = FallbackBuilder::new(&config);

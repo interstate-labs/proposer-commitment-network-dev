@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::{HashMap, HashSet}, net::SocketAddr, str::FromStr, sync::Arc};
+use std::{borrow::Cow, collections::{HashMap, HashSet}};
 
 use alloy::{
     hex, 
@@ -7,12 +7,11 @@ use alloy::{
     signers::k256::sha2::{Digest, Sha256},
     consensus::BlobTransactionSidecar,
 };
-use axum::{Router, extract::{Path, State}, response::Html, routing::{ get, post }, Json};
 use builder::{GetHeaderParams, GetPayloadResponse, SignedBuilderBid};
 
 use reth_primitives::{ PooledTransactionsElement, TxType};
 
-use ethereum_consensus::{crypto::PublicKey as ECBlsPublicKey, builder::SignedValidatorRegistration, deneb::mainnet::SignedBlindedBeaconBlock, Fork, deneb::compute_signing_root};
+use ethereum_consensus::{crypto::PublicKey as ECBlsPublicKey, builder::SignedValidatorRegistration, deneb::mainnet::SignedBlindedBeaconBlock, Fork};
 use serde::{Deserialize, Serialize, de, ser::SerializeSeq };
 
 use reqwest::{ Client, ClientBuilder, StatusCode, Url };
@@ -22,7 +21,6 @@ use crate::{
     errors::{CommitBoostError, ErrorResponse},
     delegation::{SignedDelegationMessage, SignedRevocationMessage},
 };
-use crate::config::Config;
 
 mod builder;
 mod block_builder;
@@ -269,7 +267,7 @@ impl CommitBoostApi {
         }
     }
 
-    pub fn get_constraints_signer(&self, validator_pubkey: ECBlsPublicKey) -> Option<ECBlsPublicKey> {
+    pub fn get_constraints_signer(&self, _validator_pubkey: ECBlsPublicKey) -> Option<ECBlsPublicKey> {
         None
     }    
     
@@ -542,15 +540,9 @@ pub fn serialize_txs<S: serde::Serializer>(
 mod tests {
     use super::*;
     use blst::min_pk::Signature as BlsSignature;
-    use crate::{config::{Chain, ChainConfig}, keystores::BLSSig, test_utils::{default_test_transaction, get_test_config}, utils::create_random_bls_secretkey, BLS_DST_PREFIX};
-    use alloy::{
-        eips::eip2718::Encodable2718,
-        network::{EthereumWallet, TransactionBuilder},
-        primitives::{bytes, hex, keccak256, Address},
-        signers::{k256::ecdsa::SigningKey, local::PrivateKeySigner},
-    };
-    use ethereum_consensus::crypto::PublicKey as ECECBlsPublicKey;
-    use reth_primitives::TransactionSigned;
+    use crate::{config::ChainConfig, keystores::BLSSig, utils::create_random_bls_secretkey, BLS_DST_PREFIX};
+    use alloy::primitives::bytes;
+    use ethereum_consensus::deneb::compute_signing_root;
     #[derive(Debug, Clone, PartialEq)]
     struct MockTransaction {
         data: Vec<u8>,
