@@ -193,12 +193,12 @@ impl ConstraintsMessage {
         pubkey:validator_pubkey,
         slot: request.slot,
         transactions:constraints,
-        top: true
+        top: false
     }
   }
   
   pub fn from_tx(validator_pubkey: ECBlsPublicKey, slot: u64, constraint: Constraint) -> Self {
-    Self { pubkey:validator_pubkey, slot, top: true, transactions: vec![constraint] }
+    Self { pubkey:validator_pubkey, slot, top: false, transactions: vec![constraint] }
   }
 
   pub fn digest(&self) -> [u8; 32] {
