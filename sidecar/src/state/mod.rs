@@ -477,3 +477,47 @@ impl HeadEventListener {
         self.new_heads_rx.resubscribe()
     }
 }
+
+mod tests {
+    use beacon_api_client::Client;
+    use alloy::primitives::{PrimitiveSignature, Address};
+
+    use super::*;
+    use crate::test_utils::get_test_config;
+    #[tokio::test]
+    async fn test_constraint_state_validate_preconf_request() {
+        let config = get_test_config();
+        let client = Client::new(config.beacon_api_url);
+        let mut state = ConstraintState::new(
+            client,
+            config.validator_indexes.clone(),
+            config.chain.get_commitment_deadline_duration(),
+        );
+
+        state.current_epoch = Epoch {
+            value: 1000,
+            start_slot: 1000 * SLOTS_PER_EPOCH,
+            proposer_duties: vec![],
+        };
+
+        let txs = vec![];
+        let signature = PrimitiveSignature::from_bytes_and_parity(&[0; 64], false);
+        let sender = Address::new([0; 20]);
+
+        let mut req = PreconfRequest {
+            slot: 0,
+            txs,
+            signature,
+            sender,
+        };
+
+        let key = state.validate_preconf_request(&req);
+        assert!(key.is_err_and(|err| matches!(err, StateError::InvalidSlot(_))));
+
+        req.slot = 1000 * SLOTS_PER_EPOCH + 3;
+
+        let key = state.validate_preconf_request(&req);
+
+        assert!(key.is_err_and(|err| matches!(err, StateError::NoValidatorInSlot)));
+    }
+}
