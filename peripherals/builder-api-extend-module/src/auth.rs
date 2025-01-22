@@ -3,7 +3,7 @@ use axum::{
     body::Body,
     extract::Request,
     middleware::Next,
-    response::{Html, Response},
+    response::Response,
     Json,
 };
 use ethers::types::{Address, Signature};

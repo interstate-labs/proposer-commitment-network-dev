@@ -61,6 +61,7 @@ pub trait TransactionExt {
     fn gas_limit(&self) -> u64;
 
     /// Returns the value of the transaction.
+    #[allow(dead_code)]
     fn value(&self) -> U256;
 
     /// Returns the type of the transaction.
@@ -73,6 +74,7 @@ pub trait TransactionExt {
     fn input(&self) -> &Bytes;
 
     /// Returns the chain ID of the transaction.
+    #[allow(dead_code)]
     fn chain_id(&self) -> Option<u64>;
 
     /// Returns the blob sidecar of the transaction, if any.
@@ -193,6 +195,7 @@ pub struct ConstraintsMessage {
 }
 
 impl ConstraintsMessage {
+    #[allow(dead_code)]
     pub fn build(validator_pubkey: ECBlsPublicKey, request: PreconfRequest) -> Self {
         let constraints = request.txs;
         Self {
@@ -238,11 +241,13 @@ impl From<PooledTransactionsElement> for Constraint {
 }
 
 impl Constraint {
+    #[allow(dead_code)]
     pub fn decode_enveloped(data: impl AsRef<[u8]>) -> eyre::Result<Self> {
         let tx = PooledTransactionsElement::decode_2718(&mut data.as_ref())?;
         Ok(Self { tx, sender: None })
     }
 
+    #[allow(dead_code)]
     pub fn effective_tip_per_gas(&self, base_fee: u128) -> Option<u128> {
         let max_fee_per_gas = self.tx.max_fee_per_gas();
 
@@ -280,7 +285,7 @@ impl CommitBoostApi {
             delegations: delegations_messages.clone(),
         }
     }
-
+    #[allow(dead_code)]
     pub fn get_constraints_signer(
         &self,
         _validator_pubkey: ECBlsPublicKey,
@@ -345,6 +350,7 @@ impl CommitBoostApi {
     }
 
     /// Implements: <https://ethereum.github.io/builder-specs/#/Builder/getHeader>
+    #[allow(dead_code)]
     async fn get_header(
         &self,
         params: GetHeaderParams,
@@ -425,6 +431,7 @@ impl CommitBoostApi {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn send_constraints_to_be_collected(
         &self,
         constraints: &Vec<SignedConstraints>,
@@ -504,6 +511,7 @@ impl CommitBoostApi {
         Ok(())
     }
 
+    #[allow(dead_code)]
     async fn revoke(
         &self,
         signed_data: &[SignedRevocationMessage],

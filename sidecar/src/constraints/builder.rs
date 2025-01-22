@@ -67,6 +67,7 @@ pub enum GetPayloadResponse {
 }
 
 impl GetPayloadResponse {
+    #[allow(dead_code)]
     pub fn block_hash(&self) -> &Hash32 {
         match self {
             GetPayloadResponse::Capella(payload) => payload.block_hash(),

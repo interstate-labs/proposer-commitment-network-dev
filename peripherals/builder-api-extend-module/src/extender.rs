@@ -104,7 +104,6 @@ impl Extender {
         for builder in &self.builders {
             let nbuilder = builder.clone();
             let params = params.clone();
-            let url = &nbuilder.url;
             handles.push(tokio::spawn(
                 async move { nbuilder.get_header(params).await },
             ));

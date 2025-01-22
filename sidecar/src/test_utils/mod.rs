@@ -9,6 +9,7 @@ use alloy::{
 use crate::config::Config;
 
 /// Return a mock configuration for testing purposes.
+#[allow(dead_code)]
 pub(crate) fn get_test_config() -> Config {
     let mut envs = HashMap::new();
 
@@ -68,6 +69,7 @@ pub(crate) fn get_test_config() -> Config {
 }
 
 /// Create a default transaction template to use for tests
+#[allow(dead_code)]
 pub(crate) fn default_test_transaction(sender: Address, nonce: Option<u64>) -> TransactionRequest {
     TransactionRequest::default()
         .with_from(sender)

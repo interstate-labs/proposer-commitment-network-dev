@@ -8,7 +8,7 @@ use axum::{
     routing::post,
     Json, Router,
 };
-use axum_client_ip::{InsecureClientIp, SecureClientIp, SecureClientIpSource};
+use axum_client_ip::SecureClientIpSource;
 use serde::Serialize;
 use std::{net::SocketAddr, sync::Arc, time::Instant};
 use tokio::sync::mpsc;

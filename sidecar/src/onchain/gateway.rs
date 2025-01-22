@@ -11,6 +11,7 @@ use serde::Serialize;
 use GatewayContract::GatewayContractInstance;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct GatewayController(GatewayContractInstance<Http<Client>, RootProvider<Http<Client>>>);
 
 impl GatewayController {
@@ -21,6 +22,7 @@ impl GatewayController {
         Self(gateway)
     }
 
+    #[allow(dead_code)]
     pub async fn check_ip(&self, ip: String) -> eyre::Result<bool> {
         let data = match self.0.getGatewayIPs().call().await {
             Ok(content) => content,

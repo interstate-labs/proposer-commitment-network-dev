@@ -21,6 +21,7 @@ pub struct CommitmentRequestEvent {
 
 #[derive(Debug, Clone)]
 pub struct CommitmentRequestHandler {
+    #[allow(dead_code)]
     cache: Arc<RwLock<lru::LruCache<u64, Vec<PreconfRequest>>>>,
     event_sender: mpsc::Sender<CommitmentRequestEvent>,
     gateway_controller: GatewayController,
@@ -87,6 +88,7 @@ impl CommitmentRequestHandler {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn verify_ip(&self, ip: String) -> eyre::Result<bool> {
         self.gateway_controller.check_ip(ip).await
     }
@@ -170,6 +172,7 @@ pub enum CommitmentRequestError {
     Custom(String),
 
     #[error("Not allowed ip: {0}")]
+    #[allow(dead_code)]
     NotAllowedIP(String),
 }
 

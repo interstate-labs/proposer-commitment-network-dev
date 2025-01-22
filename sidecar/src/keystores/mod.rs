@@ -16,7 +16,7 @@ use crate::config::ChainConfig;
 use crate::constraints::signature::compute_signing_root;
 
 #[derive(Debug, thiserror::Error)]
-#[allow(missing_docs)]
+#[allow(missing_docs, dead_code)]
 pub enum KeystoreError {
     #[error("failed to read keystore directory: {0}")]
     ReadFromDirectory(#[from] std::io::Error),

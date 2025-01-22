@@ -32,6 +32,7 @@ impl Deref for SignedRevocationMessage {
     }
 }
 
+#[allow(dead_code)]
 pub enum DelegationMessageType {
     Delegation,
     Revocation,
@@ -45,6 +46,7 @@ pub struct DelegationMessage {
 }
 
 impl DelegationMessage {
+  #[allow(dead_code)]
     pub fn new(validator_pubkey: BlsPublicKey, delegatee_pubkey: BlsPublicKey) -> Self {
         DelegationMessage {
             action: DelegationMessageType::Delegation as u8,
@@ -52,7 +54,7 @@ impl DelegationMessage {
             delegatee_pubkey,
         }
     }
-
+    #[allow(dead_code)]
     pub fn digest(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update([self.action]);
@@ -71,6 +73,7 @@ pub struct RevocationMessage {
 }
 
 impl RevocationMessage {
+    #[allow(dead_code)]
     pub fn new(validator_pubkey: BlsPublicKey, target_pubkey: BlsPublicKey) -> Self {
         RevocationMessage {
             message_type: DelegationMessageType::Revocation as u8,
@@ -78,7 +81,7 @@ impl RevocationMessage {
             target_pubkey,
         }
     }
-
+    #[allow(dead_code)]
     pub fn digest(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update([self.message_type]);

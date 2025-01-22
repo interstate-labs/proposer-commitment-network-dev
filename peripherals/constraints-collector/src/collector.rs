@@ -18,12 +18,11 @@ use ethereum_consensus::{
 
 use reqwest::{Client as ReqwestClient, ClientBuilder, StatusCode, Url};
 use std::{collections::HashMap, sync::Arc};
-use tracing::error;
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CollectorError, ErrorResponse, SignedConstraints, CONSTRAINTS_PATH, GET_HEADER_PATH,
+    CollectorError, ErrorResponse, SignedConstraints, CONSTRAINTS_PATH,
     GET_PAYLOAD_PATH, REGISTER_VALIDATORS_PATH, STATUS_PATH,
 };
 

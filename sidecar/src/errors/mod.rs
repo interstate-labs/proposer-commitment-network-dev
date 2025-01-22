@@ -14,7 +14,7 @@ pub struct ErrorResponse {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[allow(missing_docs)]
+#[allow(missing_docs, dead_code)]
 #[non_exhaustive]
 pub enum CommitBoostError {
     #[error("No validators could be registered: {0:?}")]

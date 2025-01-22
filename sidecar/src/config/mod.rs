@@ -30,6 +30,7 @@ pub struct Config {
     /// The constraints collector url
     pub collector_url: Url,
     /// The constraints collector websocket url
+    #[allow(dead_code)]
     pub collector_ws: String,
     /// URL for the beacon client API URL
     pub beacon_api_url: Url,

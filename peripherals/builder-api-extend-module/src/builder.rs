@@ -29,6 +29,7 @@ pub const GET_HEADER_PATH: &str = "/eth/v1/builder/header/:slot/:parent_hash/:pu
 /// The path to the builder API get payload endpoint.
 pub const GET_PAYLOAD_PATH: &str = "/eth/v1/builder/blinded_blocks";
 /// The path to the constraints API submit constraints endpoint.
+#[allow(dead_code)]
 pub const CONSTRAINTS_PATH: &str = "/constraints/v1/builder/constraints";
 
 #[derive(Clone)]

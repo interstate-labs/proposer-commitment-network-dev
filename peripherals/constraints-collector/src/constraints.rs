@@ -1,6 +1,6 @@
 use alloy::{
     hex,
-    primitives::{keccak256, Address, FixedBytes},
+    primitives::{Address, FixedBytes},
 };
 use reth_primitives::PooledTransactionsElement;
 use serde::{de, Deserialize, Deserializer, Serialize};

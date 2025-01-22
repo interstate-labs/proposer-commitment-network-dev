@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, ops::Deref, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
     extract::{
@@ -14,10 +14,6 @@ use ethereum_consensus::{
 };
 use reqwest::StatusCode;
 use tokio::sync::broadcast;
-use tower_http::{
-    services::ServeDir,
-    trace::{DefaultMakeSpan, TraceLayer},
-};
 
 use crate::{
     CollectorError, ConstraintsCollector, GetHeaderParams, GetPayloadResponse, SignedBuilderBid,

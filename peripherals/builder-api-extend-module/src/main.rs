@@ -13,7 +13,7 @@ mod utils;
 
 #[tokio::main]
 async fn main() {
-    dotenv::dotenv();
+    let _ = dotenv::dotenv();
 
     let subscriber = Subscriber::builder()
         .with_max_level(tracing::Level::DEBUG)

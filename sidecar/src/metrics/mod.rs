@@ -70,7 +70,7 @@ impl ApiMetrics {
     }
 
     /// Counters ----------------------------------------------------------------
-
+    #[allow(dead_code)]
     pub fn increment_http_requests_count(method: String, path: String, status: String) {
         counter!(
             HTTP_REQUESTS_DURATION_SECONDS,
@@ -78,11 +78,11 @@ impl ApiMetrics {
         )
         .increment(1);
     }
-
+    #[allow(dead_code)]
     pub fn increment_proposed_local_blocks_count() {
         counter!(PROPOSED_LOCAL_BLOCKS_COUNTER).increment(1);
     }
-
+    #[allow(dead_code)]
     pub fn increment_proposed_remote_blocks_count() {
         counter!(PROPOSED_REMOTE_BLOCKS_COUNTER).increment(1);
     }
@@ -90,11 +90,11 @@ impl ApiMetrics {
     pub fn increment_received_commitments_count() {
         counter!(RECEIVED_COMMITMENTS_COUNTER).increment(1);
     }
-
+    #[allow(dead_code)]
     pub fn increment_approved_commitments_count() {
         counter!(APPROVED_COMMITMENTS_COUNTER).increment(1);
     }
-
+    #[allow(dead_code)]
     pub fn increment_gross_tip_revenue_count(mut tip: u128) {
         // If the tip is too large, we need to split it into multiple u64 parts
         if tip > u64::MAX as u128 {

@@ -52,7 +52,8 @@ pub enum Chain {
 }
 
 impl Chain {
-    // get chain name as str
+    /// get chain name as str
+    #[allow(dead_code)]
     pub fn get_name(&self) -> &'static str {
         match self {
             Chain::Holesky => "mainnet",
@@ -60,7 +61,7 @@ impl Chain {
         }
     }
 
-    // get fork version of chain
+    /// get fork version of chain
     pub fn get_fork_version(&self) -> [u8; 4] {
         match self {
             Chain::Holesky => [1, 1, 112, 0],
@@ -75,6 +76,7 @@ impl ChainConfig {
         Duration::from_millis(self.commitment_deadline)
     }
 
+    #[allow(dead_code)]
     pub fn get_chain_id(&self) -> u64 {
         self.id
     }
@@ -115,9 +117,11 @@ impl ChainConfig {
 }
 
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct ValidatorIndexes(Vec<u64>);
 
 impl ValidatorIndexes {
+    #[allow(dead_code)]
     pub fn contains(&self, index: u64) -> bool {
         self.0.contains(&index)
     }

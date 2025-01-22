@@ -64,9 +64,11 @@ pub struct ConstraintState {
     pub latest_slot_timestamp: Instant,
     pub current_epoch: Epoch,
     pub header: BeaconBlockHeader,
+    #[allow(dead_code)]
     pub validator_indexes: ValidatorIndexes,
     pub max_commitments_in_block: usize,
     pub max_commitment_gas: NonZero<u64>,
+    #[allow(dead_code)]
     pub min_priority_fee: u128,
     pub block_gas_limit: u64,
     pub max_tx_input_bytes: usize,
@@ -110,6 +112,7 @@ impl ConstraintState {
         }
     }
 
+    #[allow(dead_code)]
     pub fn replace_constraints(&mut self, slot: u64, signed_constraints: &Vec<SignedConstraints>) {
         tracing::debug!("here is replace constraints function");
         if let Some(block) = self.blocks.get_mut(&slot) {
@@ -280,15 +283,18 @@ impl Block {
         self.signed_constraints_list.push(constraints);
     }
 
+    #[allow(dead_code)]
     pub fn replace_constraints(&mut self, constraints: &Vec<SignedConstraints>) {
         self.signed_constraints_list = constraints.clone();
     }
 
+    #[allow(dead_code)]
     pub fn remove_constraints(&mut self, slot: u64) {
         self.signed_constraints_list
             .remove(slot.try_into().unwrap());
     }
 
+    #[allow(dead_code)]
     pub fn get_transactions(&self) -> Vec<PooledTransactionsElement> {
         self.signed_constraints_list
             .iter()
@@ -401,6 +407,7 @@ pub struct HeadEventListener {
     new_heads_rx: broadcast::Receiver<HeadEvent>,
     /// Handle to the background task that listens for new head events.
     /// Kept to allow for graceful shutdown.
+    #[allow(dead_code)]
     quit: AbortHandle,
 }
 
@@ -456,6 +463,7 @@ impl HeadEventListener {
         }
     }
 
+    #[allow(dead_code)]
     pub fn stop(self) {
         self.quit.abort();
     }
@@ -464,6 +472,7 @@ impl HeadEventListener {
         self.new_heads_rx.recv().await
     }
 
+    #[allow(dead_code)]
     pub fn subscribe_new_heads(&self) -> broadcast::Receiver<HeadEvent> {
         self.new_heads_rx.resubscribe()
     }
