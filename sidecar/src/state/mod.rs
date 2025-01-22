@@ -478,6 +478,7 @@ impl HeadEventListener {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use beacon_api_client::Client;
     use alloy::primitives::{PrimitiveSignature, Address};
