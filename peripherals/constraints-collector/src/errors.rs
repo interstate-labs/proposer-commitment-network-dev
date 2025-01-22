@@ -1,7 +1,10 @@
 use alloy::eips::eip2718::Eip2718Error;
-use serde::{ Serialize, Deserialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 
-use axum::{response::{IntoResponse, Response}, Json};
+use axum::{
+    response::{IntoResponse, Response},
+    Json,
+};
 use reqwest::StatusCode;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorResponse {
@@ -43,7 +46,6 @@ pub enum CollectorError {
     #[error("Generic error: {0}")]
     Generic(String),
 }
-
 
 impl IntoResponse for CollectorError {
     fn into_response(self) -> Response {
@@ -87,9 +89,11 @@ impl IntoResponse for CollectorError {
             CollectorError::Generic(err) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, Json(err)).into_response()
             }
-            CollectorError::Decode(_eip2718_error) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, Json("EIP decoding error".to_string())).into_response()
-            },
+            CollectorError::Decode(_eip2718_error) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json("EIP decoding error".to_string()),
+            )
+                .into_response(),
         }
     }
 }

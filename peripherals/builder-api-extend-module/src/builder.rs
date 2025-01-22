@@ -1,11 +1,22 @@
-use reqwest::{ Url, Client, ClientBuilder, StatusCode };
+use reqwest::{Client, ClientBuilder, StatusCode, Url};
 
-use ethereum_consensus::{
-  builder::SignedValidatorRegistration, crypto::{KzgCommitment, PublicKey as BlsPublicKey, Signature as BlsSignature}, deneb::{self, mainnet::{BlobsBundle, SignedBlindedBeaconBlock, MAX_BLOB_COMMITMENTS_PER_BLOCK}, presets::mainnet::ExecutionPayloadHeader, Hash32}, serde::as_str, ssz::prelude::*, types::mainnet::ExecutionPayload, Fork
-};
 use alloy::hex;
-use std::collections::HashMap;
+use ethereum_consensus::{
+    builder::SignedValidatorRegistration,
+    crypto::{KzgCommitment, PublicKey as BlsPublicKey, Signature as BlsSignature},
+    deneb::{
+        self,
+        mainnet::{BlobsBundle, SignedBlindedBeaconBlock, MAX_BLOB_COMMITMENTS_PER_BLOCK},
+        presets::mainnet::ExecutionPayloadHeader,
+        Hash32,
+    },
+    serde::as_str,
+    ssz::prelude::*,
+    types::mainnet::ExecutionPayload,
+    Fork,
+};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::error::{BuilderApiError, ErrorResponse};
 
@@ -22,8 +33,8 @@ pub const CONSTRAINTS_PATH: &str = "/constraints/v1/builder/constraints";
 
 #[derive(Clone)]
 pub struct BuilderClient {
-  pub url: Url,
-  client: Client,
+    pub url: Url,
+    client: Client,
 }
 
 impl BuilderClient {
@@ -46,14 +57,14 @@ impl BuilderClient {
 
     /// Implements: <https://ethereum.github.io/builder-specs/#/Builder/status>
     pub async fn status(&self) -> Result<StatusCode, BuilderApiError> {
-    Ok(self
-        .client
-        .get(self.endpoint(STATUS_PATH))
-        .header("content-type", "application/json")
-        .send()
-        .await?
-        .status())
-}
+        Ok(self
+            .client
+            .get(self.endpoint(STATUS_PATH))
+            .header("content-type", "application/json")
+            .send()
+            .await?
+            .status())
+    }
 
     /// Implements: <https://ethereum.github.io/builder-specs/#/Builder/registerValidator>
     pub async fn register_validators(
@@ -81,52 +92,51 @@ impl BuilderClient {
         &self,
         params: GetHeaderParams,
     ) -> Result<VersionedValue<SignedBuilderBid>, BuilderApiError> {
-    let parent_hash = format!("0x{}", hex::encode(params.parent_hash.as_ref()));
-    let public_key = format!("0x{}", hex::encode(params.public_key.as_ref()));
-    
-    let response = self
-        .client
-        .get(self.endpoint(&format!(
-            "/eth/v1/builder/header/{}/{}/{}",
-            params.slot, parent_hash, public_key
-        )))
-        .header("content-type", "application/json")
-        .send()
-        .await?;
+        let parent_hash = format!("0x{}", hex::encode(params.parent_hash.as_ref()));
+        let public_key = format!("0x{}", hex::encode(params.public_key.as_ref()));
 
-    if response.status() != StatusCode::OK {
-        let error = response.json::<ErrorResponse>().await?;
-        return Err(BuilderApiError::FailedGettingHeader(error));
+        let response = self
+            .client
+            .get(self.endpoint(&format!(
+                "/eth/v1/builder/header/{}/{}/{}",
+                params.slot, parent_hash, public_key
+            )))
+            .header("content-type", "application/json")
+            .send()
+            .await?;
+
+        if response.status() != StatusCode::OK {
+            let error = response.json::<ErrorResponse>().await?;
+            return Err(BuilderApiError::FailedGettingHeader(error));
+        }
+
+        let header = response.json::<VersionedValue<SignedBuilderBid>>().await?;
+
+        Ok(header)
     }
-
-    let header = response.json::<VersionedValue<SignedBuilderBid>>().await?;
-
-    Ok(header)
-}
 
     /// Implements: <https://ethereum.github.io/builder-specs/#/Builder/submitBlindedBlock>
     pub async fn get_payload(
         &self,
         signed_block: SignedBlindedBeaconBlock,
     ) -> Result<GetPayloadResponse, BuilderApiError> {
-      let response = self
-          .client
-          .post(self.endpoint(GET_PAYLOAD_PATH))
-          .header("content-type", "application/json")
-          .body(serde_json::to_vec(&signed_block)?)
-          .send()
-          .await?;
+        let response = self
+            .client
+            .post(self.endpoint(GET_PAYLOAD_PATH))
+            .header("content-type", "application/json")
+            .body(serde_json::to_vec(&signed_block)?)
+            .send()
+            .await?;
 
-      if response.status() != StatusCode::OK {
-          let error = response.json::<ErrorResponse>().await?;
-          return Err(BuilderApiError::FailedGettingPayload(error));
-      }
+        if response.status() != StatusCode::OK {
+            let error = response.json::<ErrorResponse>().await?;
+            return Err(BuilderApiError::FailedGettingPayload(error));
+        }
 
-      let payload = response.json().await?;
+        let payload = response.json().await?;
 
-      Ok(payload)
-  }
-
+        Ok(payload)
+    }
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]

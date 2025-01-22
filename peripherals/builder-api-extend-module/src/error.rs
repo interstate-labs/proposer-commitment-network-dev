@@ -1,4 +1,7 @@
-use axum::{response::{IntoResponse, Response}, Json};
+use axum::{
+    response::{IntoResponse, Response},
+    Json,
+};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize, Serializer};
 
@@ -45,7 +48,7 @@ pub enum BuilderApiError {
     #[error("Env error: {0}")]
     ENVError(String),
     #[error("JWT error: {0}")]
-    JWTError(String)
+    JWTError(String),
 }
 
 impl IntoResponse for BuilderApiError {
@@ -104,7 +107,7 @@ impl IntoResponse for BuilderApiError {
             }
             BuilderApiError::FailedJoinningInExtender(err) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, Json(err)).into_response()
-            },
+            }
         }
     }
 }

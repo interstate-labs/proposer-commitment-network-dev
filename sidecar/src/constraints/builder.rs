@@ -1,29 +1,28 @@
 use alloy::hex::hex;
-use ethereum_consensus::{
-  crypto::{KzgCommitment, PublicKey as BlsPublicKey, Signature as BlsSignature},
-  deneb::{
-      self,
-      mainnet::{BlobsBundle, MAX_BLOB_COMMITMENTS_PER_BLOCK},
-      presets::mainnet::ExecutionPayloadHeader,
-      Hash32,
-  },
-  serde::as_str,
-  ssz::prelude::*,
-  types::mainnet::ExecutionPayload,
-  Fork,
-};
 use blst::min_pk::SecretKey as BLSSecretKey;
+use ethereum_consensus::{
+    crypto::{KzgCommitment, PublicKey as BlsPublicKey, Signature as BlsSignature},
+    deneb::{
+        self,
+        mainnet::{BlobsBundle, MAX_BLOB_COMMITMENTS_PER_BLOCK},
+        presets::mainnet::ExecutionPayloadHeader,
+        Hash32,
+    },
+    serde::as_str,
+    ssz::prelude::*,
+    types::mainnet::ExecutionPayload,
+    Fork,
+};
 
 use crate::config::{ChainConfig, Config};
 use crate::state::Block;
 
 use super::{
-    block_builder:: { 
-        create_consensus_execution_payload, 
-        create_execution_payload_header, 
-        BlockBuilder
+    block_builder::{
+        create_consensus_execution_payload, create_execution_payload_header, BlockBuilder,
     },
-    signature::sign_builder_message};
+    signature::sign_builder_message,
+};
 
 #[derive(Debug, serde::Deserialize)]
 pub struct GetHeaderParams {
@@ -100,7 +99,6 @@ impl From<PayloadAndBlobs> for GetPayloadResponse {
     }
 }
 
-
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SignedBuilderBid {
     pub message: BuilderBid,
@@ -125,7 +123,7 @@ pub struct FallbackBuilder {
     // block generator
     block_builder: BlockBuilder,
     // the last built block with bid
-    payload_and_bid: Option<PayloadAndBid>
+    payload_and_bid: Option<PayloadAndBid>,
 }
 
 impl FallbackBuilder {
@@ -134,21 +132,18 @@ impl FallbackBuilder {
             bls_secret_key: config.builder_bls_private_key.clone(),
             chain: config.chain.clone(),
             block_builder: BlockBuilder::new(config),
-            payload_and_bid: None
-        }  
+            payload_and_bid: None,
+        }
     }
 
-    pub async fn build_fallback_payload( &mut self, block: &Block) -> Result<(), BuilderError> {
+    pub async fn build_fallback_payload(&mut self, block: &Block) -> Result<(), BuilderError> {
         let transactions = block.convert_constraints_to_transactions();
         let blobs_bundle = block.parse_to_blobs_bundle();
         let kzg_commitments = blobs_bundle.commitments.clone();
 
         // 1. build a fallback payload with the given transactions, on top of
         // the current head of the chain
-        let sealed_block = self
-            .block_builder
-            .build_sealed_block(&transactions)
-            .await?;
+        let sealed_block = self.block_builder.build_sealed_block(&transactions).await?;
 
         // NOTE: we use a big value for the bid to ensure it gets chosen by mev-boost.
         // the client has no way to actually verify this, and we don't need to trust
@@ -180,13 +175,13 @@ impl FallbackBuilder {
 
         Ok(())
     }
-    
+
     /// Get the cached payload and bid from the local builder, consuming the value.
     #[inline]
     pub fn get_cached_payload(&mut self) -> Option<PayloadAndBid> {
         self.payload_and_bid.take()
     }
-    
+
     /// transform a sealed header into a signed builder bid using
     /// the local builder's BLS key.
     fn create_signed_builder_bid(
@@ -197,7 +192,8 @@ impl FallbackBuilder {
     ) -> Result<SignedBuilderBid, BuilderError> {
         // compat: convert from blst to ethereum consensus types
         let pubkey = self.bls_secret_key.sk_to_pk().to_bytes();
-        let consensus_pubkey = BlsPublicKey::try_from(pubkey.as_slice()).expect("valid pubkey bytes");
+        let consensus_pubkey =
+            BlsPublicKey::try_from(pubkey.as_slice()).expect("valid pubkey bytes");
         let blob_kzg_commitments = List::try_from(blob_kzg_commitments).expect("valid list");
 
         let message = BuilderBid {
@@ -211,7 +207,6 @@ impl FallbackBuilder {
 
         Ok(SignedBuilderBid { message, signature })
     }
-
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -239,4 +234,3 @@ pub enum BuilderError {
     #[error("Failed to build payload: {0}")]
     Custom(String),
 }
-

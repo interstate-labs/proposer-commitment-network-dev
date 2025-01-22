@@ -2,20 +2,29 @@ use alloy::hex;
 use parking_lot::RwLock;
 
 use ethereum_consensus::{
-    builder::SignedValidatorRegistration, crypto::{KzgCommitment, PublicKey as BlsPublicKey, Signature as BlsSignature}, deneb::{self, mainnet::{BlobsBundle, SignedBlindedBeaconBlock, MAX_BLOB_COMMITMENTS_PER_BLOCK}, presets::mainnet::ExecutionPayloadHeader, Hash32}, serde::as_str, ssz::prelude::*, types::mainnet::ExecutionPayload, Fork
-  };
-  
-use reqwest::{ StatusCode, Client as ReqwestClient, Url, ClientBuilder };
+    builder::SignedValidatorRegistration,
+    crypto::{KzgCommitment, PublicKey as BlsPublicKey, Signature as BlsSignature},
+    deneb::{
+        self,
+        mainnet::{BlobsBundle, SignedBlindedBeaconBlock, MAX_BLOB_COMMITMENTS_PER_BLOCK},
+        presets::mainnet::ExecutionPayloadHeader,
+        Hash32,
+    },
+    serde::as_str,
+    ssz::prelude::*,
+    types::mainnet::ExecutionPayload,
+    Fork,
+};
+
+use reqwest::{Client as ReqwestClient, ClientBuilder, StatusCode, Url};
 use std::{collections::HashMap, sync::Arc};
 use tracing::error;
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
-  SignedConstraints,
-  STATUS_PATH, REGISTER_VALIDATORS_PATH, GET_HEADER_PATH, GET_PAYLOAD_PATH, CONSTRAINTS_PATH,
-  CollectorError,
-  ErrorResponse
+    CollectorError, ErrorResponse, SignedConstraints, CONSTRAINTS_PATH, GET_HEADER_PATH,
+    GET_PAYLOAD_PATH, REGISTER_VALIDATORS_PATH, STATUS_PATH,
 };
 
 /// A thread-safe collector for storing constraints.
@@ -23,17 +32,18 @@ use crate::{
 pub struct ConstraintsCollector {
     pub collected_constraints: Arc<RwLock<HashMap<u64, Vec<SignedConstraints>>>>,
     cb_client: ReqwestClient,
-    cb_url: Url
+    cb_url: Url,
 }
-
-
 
 impl ConstraintsCollector {
     pub fn new(url: Url) -> Self {
-        Self { 
-          collected_constraints: Default::default(), 
-          cb_client: ClientBuilder::new().user_agent("constraints-collector").build().unwrap(), 
-          cb_url: url 
+        Self {
+            collected_constraints: Default::default(),
+            cb_client: ClientBuilder::new()
+                .user_agent("constraints-collector")
+                .build()
+                .unwrap(),
+            cb_url: url,
         }
     }
 
@@ -50,15 +60,15 @@ impl ConstraintsCollector {
     //// Implements build apis
     /// Implements: <https://ethereum.github.io/builder-specs/#/Builder/status>
     pub async fn status(&self) -> Result<StatusCode, CollectorError> {
-          Ok(self
-              .cb_client
-              .get(self.cb_url.join(STATUS_PATH).unwrap())
-              .header("content-type", "application/json")
-              .send()
-              .await?
-              .status())
-      }
-  
+        Ok(self
+            .cb_client
+            .get(self.cb_url.join(STATUS_PATH).unwrap())
+            .header("content-type", "application/json")
+            .send()
+            .await?
+            .status())
+    }
+
     /// Implements: <https://ethereum.github.io/builder-specs/#/Builder/registerValidator>
     pub async fn register_validators(
         &self,
@@ -103,34 +113,32 @@ impl ConstraintsCollector {
         Ok(payload)
     }
 
-    pub async fn send_constraints(
-        &self,
-        slot: u64,
-    ) -> Result<(), CollectorError> {
-
+    pub async fn send_constraints(&self, slot: u64) -> Result<(), CollectorError> {
         let constraints_store = self.collected_constraints.read().clone();
 
         let Some(collected_constraints) = constraints_store.get(&slot) else {
-          return Err(
-            CollectorError::FailedSubmittingConstraints(ErrorResponse::new(500, "Failed in getting collected constraints".to_string()))
-          );
+            return Err(CollectorError::FailedSubmittingConstraints(
+                ErrorResponse::new(500, "Failed in getting collected constraints".to_string()),
+            ));
         };
 
-        tracing::debug!("collected constraints to be sent: {:#?}", collected_constraints);
+        tracing::debug!(
+            "collected constraints to be sent: {:#?}",
+            collected_constraints
+        );
 
         let response = self
-        .cb_client
-        .post(self.cb_url.join(CONSTRAINTS_PATH).unwrap())
-        .header("content-type", "application/json")
-        .body(serde_json::to_vec(collected_constraints)?)
-        .send()
-        .await?;
+            .cb_client
+            .post(self.cb_url.join(CONSTRAINTS_PATH).unwrap())
+            .header("content-type", "application/json")
+            .body(serde_json::to_vec(collected_constraints)?)
+            .send()
+            .await?;
 
         if response.status() != StatusCode::OK {
             let error = response.json::<ErrorResponse>().await?;
             return Err(CollectorError::FailedSubmittingConstraints(error));
         }
-
 
         Ok(())
     }
@@ -139,37 +147,39 @@ impl ConstraintsCollector {
         &self,
         params: GetHeaderParams,
     ) -> Result<VersionedValue<SignedBuilderBid>, CollectorError> {
-          let parent_hash = format!("0x{}", hex::encode(params.parent_hash.as_ref()));
-          let public_key = format!("0x{}", hex::encode(params.public_key.as_ref()));
-  
-          let response = self
-              .cb_client
-              .get(self.cb_url.join(&format!(
-                  "/eth/v1/builder/header_with_proofs/{}/{}/{}",
-                  params.slot, parent_hash, public_key,
-              )).unwrap())
-              .header("content-type", "application/json")
-              .send()
-              .await?;
-  
-          if response.status() != StatusCode::OK {
-              let error = response.json::<ErrorResponse>().await?;
-              return Err(CollectorError::FailedGettingHeader(error));
-          }
-  
-          let header = response.json::<VersionedValue<SignedBuilderBid>>().await?;
-  
-          if !matches!(header.version, Fork::Deneb) {
-              return Err(CollectorError::InvalidFork(header.version.to_string()));
-          };
-  
-          // TODO: verify proofs here?
-  
-          Ok(header)
-      }
-  
-}
+        let parent_hash = format!("0x{}", hex::encode(params.parent_hash.as_ref()));
+        let public_key = format!("0x{}", hex::encode(params.public_key.as_ref()));
 
+        let response = self
+            .cb_client
+            .get(
+                self.cb_url
+                    .join(&format!(
+                        "/eth/v1/builder/header_with_proofs/{}/{}/{}",
+                        params.slot, parent_hash, public_key,
+                    ))
+                    .unwrap(),
+            )
+            .header("content-type", "application/json")
+            .send()
+            .await?;
+
+        if response.status() != StatusCode::OK {
+            let error = response.json::<ErrorResponse>().await?;
+            return Err(CollectorError::FailedGettingHeader(error));
+        }
+
+        let header = response.json::<VersionedValue<SignedBuilderBid>>().await?;
+
+        if !matches!(header.version, Fork::Deneb) {
+            return Err(CollectorError::InvalidFork(header.version.to_string()));
+        };
+
+        // TODO: verify proofs here?
+
+        Ok(header)
+    }
+}
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct SignedBuilderBid {

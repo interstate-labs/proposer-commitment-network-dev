@@ -1,14 +1,14 @@
 use group_config::{HOLEKSY_CHAIN_ID, KURTOSIS_CHAIN_ID};
 use reqwest::Url;
 
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use rand::RngCore;
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
-use blst::min_pk::SecretKey as BLSSecretKey;
 use alloy::primitives::Address;
+use blst::min_pk::SecretKey as BLSSecretKey;
 
 pub mod group_config;
-pub use group_config::{ChainConfig, ValidatorIndexes, Chain};
+pub use group_config::{Chain, ChainConfig, ValidatorIndexes};
 
 /// Default port for the commitment server exposed by the sidecar.
 pub const DEFAULT_COMMITMENT_PORT: u16 = 8000;
@@ -54,8 +54,7 @@ pub struct Config {
     /// Path to the delegations file.
     pub delegations_path: Option<PathBuf>,
     /// Gateway contract address
-    pub gateway_contract: Address
-
+    pub gateway_contract: Address,
 }
 
 impl Default for Config {
@@ -63,7 +62,7 @@ impl Default for Config {
         Self {
             commitment_port: DEFAULT_COMMITMENT_PORT,
             builder_port: DEFAULT_MEV_BOOST_PROXY_PORT,
-            metrics_port:DEFAULT_METRICS_PORT,
+            metrics_port: DEFAULT_METRICS_PORT,
             collector_url: "http://localhost:3030".parse().expect("Valid URL"),
             beacon_api_url: "http://localhost:5052".parse().expect("Valid URL"),
             execution_api_url: "http://localhost:8545".parse().expect("Valid URL"),
@@ -74,10 +73,15 @@ impl Default for Config {
             fee_recipient: Address::ZERO,
             builder_bls_private_key: random_bls_secret(),
             collector_ws: String::new(),
-            keystore_secrets_path: PathBuf::from("/work/proposer-commitment-network/sidecar/keystores/secrets"),
-            keystore_pubkeys_path: PathBuf::from("/work/proposer-commitment-network/sidecar/keystores/keys"),
+            keystore_secrets_path: PathBuf::from(
+                "/work/proposer-commitment-network/sidecar/keystores/secrets",
+            ),
+            keystore_pubkeys_path: PathBuf::from(
+                "/work/proposer-commitment-network/sidecar/keystores/keys",
+            ),
             delegations_path: None,
-            gateway_contract: Address::from_str("0x8aC112a5540f441cC9beBcC647041A6E0D595B94").unwrap(),
+            gateway_contract: Address::from_str("0x8aC112a5540f441cC9beBcC647041A6E0D595B94")
+                .unwrap(),
         }
     }
 }
@@ -91,15 +95,15 @@ impl Config {
             chain: match envs["CHAIN"].clone().as_str() {
                 "kurtosis" => Chain::Kurtosis,
                 "holesky" => Chain::Holesky,
-                _ => Chain::Holesky
+                _ => Chain::Holesky,
             },
             commitment_deadline: envs["COMMITMENT_DEADLINE"].parse().unwrap(),
             slot_time: envs["SLOT_TIME"].parse().unwrap(),
             id: match envs["CHAIN"].clone().as_str() {
                 "kurtosis" => KURTOSIS_CHAIN_ID,
                 "holesky" => HOLEKSY_CHAIN_ID,
-                _ => HOLEKSY_CHAIN_ID
-            }
+                _ => HOLEKSY_CHAIN_ID,
+            },
         };
 
         Self {
@@ -107,19 +111,25 @@ impl Config {
             metrics_port: envs["METRICS_PORT"].parse().unwrap(),
             builder_port: envs["BUILDER_PORT"].parse().unwrap(),
             collector_url: envs["COLLECTOR_URL"].parse().expect("Valid URL"),
-            collector_ws:envs["COLLECTOR_SOCKET"].parse().expect("Valid URL"),
+            collector_ws: envs["COLLECTOR_SOCKET"].parse().expect("Valid URL"),
             beacon_api_url: envs["BEACON_API_URL"].parse().expect("Valid URL"),
             execution_api_url: envs["EXECUTION_API_URL"].parse().expect("Valid URL"),
             engine_api_url: envs["ENGINE_API_URL"].parse().expect("Valid URL"),
             validator_indexes: validators,
             chain: chain,
             jwt_hex: envs["JWT"].clone(),
-            fee_recipient: Address::parse_checksummed(&envs["FEE_RECIPIENT"], None).unwrap() ,
+            fee_recipient: Address::parse_checksummed(&envs["FEE_RECIPIENT"], None).unwrap(),
             builder_bls_private_key: random_bls_secret(),
             keystore_secrets_path: PathBuf::from(envs["KEYSTORE_SECRETS_PATH"].as_str()),
             keystore_pubkeys_path: PathBuf::from(envs["KEYSTORE_PUBKEYS_PATH"].as_str()),
-            delegations_path: { if envs["DELEGATIONS_PATH"].len() > 0 {Some(PathBuf::from(envs["DELEGATIONS_PATH"].as_str()))} else {None} },
-            gateway_contract: envs["GATEWAY_CONTRACT"].parse().unwrap()
+            delegations_path: {
+                if envs["DELEGATIONS_PATH"].len() > 0 {
+                    Some(PathBuf::from(envs["DELEGATIONS_PATH"].as_str()))
+                } else {
+                    None
+                }
+            },
+            gateway_contract: envs["GATEWAY_CONTRACT"].parse().unwrap(),
         }
     }
 }
@@ -169,21 +179,51 @@ mod tests {
         envs.insert("COMMITMENT_PORT".to_string(), "8001".to_string());
         envs.insert("BUILDER_PORT".to_string(), "18552".to_string());
         envs.insert("METRICS_PORT".to_string(), "8018".to_string());
-        envs.insert("COLLECTOR_URL".to_string(), "http://localhost:4000".to_string());
-        envs.insert("COLLECTOR_SOCKET".to_string(), "ws://localhost:4001".to_string());
-        envs.insert("BEACON_API_URL".to_string(), "http://localhost:6000".to_string());
-        envs.insert("EXECUTION_API_URL".to_string(), "http://localhost:7000".to_string());
-        envs.insert("ENGINE_API_URL".to_string(), "http://localhost:8000".to_string());
+        envs.insert(
+            "COLLECTOR_URL".to_string(),
+            "http://localhost:4000".to_string(),
+        );
+        envs.insert(
+            "COLLECTOR_SOCKET".to_string(),
+            "ws://localhost:4001".to_string(),
+        );
+        envs.insert(
+            "BEACON_API_URL".to_string(),
+            "http://localhost:6000".to_string(),
+        );
+        envs.insert(
+            "EXECUTION_API_URL".to_string(),
+            "http://localhost:7000".to_string(),
+        );
+        envs.insert(
+            "ENGINE_API_URL".to_string(),
+            "http://localhost:8000".to_string(),
+        );
         envs.insert("VALIDATOR_INDEXES".to_string(), "0,1,2".to_string());
         envs.insert("CHAIN".to_string(), "kurtosis".to_string());
         envs.insert("COMMITMENT_DEADLINE".to_string(), "12".to_string());
         envs.insert("SLOT_TIME".to_string(), "10".to_string());
         envs.insert("JWT".to_string(), "test-jwt".to_string());
-        envs.insert("FEE_RECIPIENT".to_string(), "0x0000000000000000000000000000000000000001".to_string());
-        envs.insert("KEYSTORE_SECRETS_PATH".to_string(), "/work/proposer-commitment-network/sidecar/keystores/secrets".to_string());
-        envs.insert("KEYSTORE_PUBKEYS_PATH".to_string(), "/work/proposer-commitment-network/sidecar/keystores/keys".to_string());
-        envs.insert("DELEGATIONS_PATH".to_string(), "/work/proposer-commitment-network/sidecar/delegations/delegations.json".to_string());
-        envs.insert("GATEWAY_CONTRACT".to_string(), "0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009".to_string());
+        envs.insert(
+            "FEE_RECIPIENT".to_string(),
+            "0x0000000000000000000000000000000000000001".to_string(),
+        );
+        envs.insert(
+            "KEYSTORE_SECRETS_PATH".to_string(),
+            "/work/proposer-commitment-network/sidecar/keystores/secrets".to_string(),
+        );
+        envs.insert(
+            "KEYSTORE_PUBKEYS_PATH".to_string(),
+            "/work/proposer-commitment-network/sidecar/keystores/keys".to_string(),
+        );
+        envs.insert(
+            "DELEGATIONS_PATH".to_string(),
+            "/work/proposer-commitment-network/sidecar/delegations/delegations.json".to_string(),
+        );
+        envs.insert(
+            "GATEWAY_CONTRACT".to_string(),
+            "0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009".to_string(),
+        );
 
         let config = Config::new(envs);
 
@@ -211,6 +251,10 @@ mod tests {
         let key1 = random_bls_secret();
         let key2 = random_bls_secret();
 
-        assert_ne!(key1.to_bytes(), key2.to_bytes(), "Keys should be random and unique");
+        assert_ne!(
+            key1.to_bytes(),
+            key2.to_bytes(),
+            "Keys should be random and unique"
+        );
     }
 }
