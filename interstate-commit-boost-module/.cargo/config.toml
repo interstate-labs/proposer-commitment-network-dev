@@ -1,0 +1,4 @@
+[env]
+CB_CONFIG="/work/commit-boost/cb-config.toml"
+METRICS_SERVER="10000"
+RUST_LOG="debug"
