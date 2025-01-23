@@ -32,6 +32,7 @@ pub fn sign_builder_message<T: HashTreeRoot>(
 
 /// Verify a SSZ object signed with a BLS public key, using the Application Builder domain
 /// for signing arbitrary builder-api messages in the out-of-protocol specifications.
+#[allow(dead_code)]
 pub fn verify_signed_builder_message<T: HashTreeRoot>(
     chain: &ChainConfig,
     pubkey: &PublicKey,
@@ -48,6 +49,7 @@ pub fn verify_signed_builder_message<T: HashTreeRoot>(
 }
 
 /// Verify a BLS signature for a given message and public key.
+#[allow(dead_code)]
 pub fn verify_signature(
     pubkey: &PublicKey,
     msg: &[u8],

@@ -1,22 +1,22 @@
 use alloy::{hex, primitives::FixedBytes};
+use ethereum_consensus::crypto::PublicKey as ECBlsPublicKey;
 use lighthouse_bls::Keypair;
-use std::{
-  collections::HashSet,
-  ffi::OsString,
-  fmt::Debug,
-  fs::{self, DirEntry, ReadDir},
-  io,
-  path::{Path, PathBuf},
-};
 use lighthouse_eth2_keystore::Keystore;
-use ethereum_consensus::{crypto::PublicKey as ECBlsPublicKey};
 use ssz::Encode;
+use std::{
+    collections::HashSet,
+    ffi::OsString,
+    fmt::Debug,
+    fs::{self, DirEntry, ReadDir},
+    io,
+    path::{Path, PathBuf},
+};
 
 use crate::config::ChainConfig;
 use crate::constraints::signature::compute_signing_root;
 
 #[derive(Debug, thiserror::Error)]
-#[allow(missing_docs)]
+#[allow(missing_docs, dead_code)]
 pub enum KeystoreError {
     #[error("failed to read keystore directory: {0}")]
     ReadFromDirectory(#[from] std::io::Error),
@@ -32,101 +32,102 @@ pub enum KeystoreError {
     SignatureLength(String, String),
 }
 
-pub struct Keystores{
-  keypairs: Vec<Keypair>,
-  chain: ChainConfig
+pub struct Keystores {
+    keypairs: Vec<Keypair>,
+    chain: ChainConfig,
 }
 
 impl Keystores {
-  pub fn new(pubkeys_root_path: &Path, secrets_path: &Path, chain: &ChainConfig) -> Self {
-    let mut keystore_paths = Vec::new();
+    pub fn new(pubkeys_root_path: &Path, secrets_path: &Path, chain: &ChainConfig) -> Self {
+        let mut keystore_paths = Vec::new();
 
-    for dir_entry in read_dir(&pubkeys_root_path.to_path_buf()).unwrap() {
-        let path = read_path(dir_entry).unwrap();
-        if path.is_dir() {
-            for dir_entry in read_dir(&path).unwrap() {
-                let path = read_path(dir_entry).unwrap();
-                if path.is_file() && path.extension() == Some(&OsString::from("json")) {
-                  keystore_paths.push(path);
+        for dir_entry in read_dir(&pubkeys_root_path.to_path_buf()).unwrap() {
+            let path = read_path(dir_entry).unwrap();
+            if path.is_dir() {
+                for dir_entry in read_dir(&path).unwrap() {
+                    let path = read_path(dir_entry).unwrap();
+                    if path.is_file() && path.extension() == Some(&OsString::from("json")) {
+                        keystore_paths.push(path);
+                    }
                 }
             }
         }
+
+        let mut keypairs = Vec::with_capacity(keystore_paths.len());
+
+        for path in keystore_paths {
+            let keystore = Keystore::from_json_file(path.clone()).unwrap();
+
+            let pubkey = format!("0x{}", keystore.pubkey());
+
+            let mut secret_path = secrets_path.to_path_buf();
+            secret_path.push(pubkey);
+
+            let password = fs::read_to_string(secret_path).unwrap();
+
+            let keypair = keystore.decrypt_keypair(password.as_bytes()).unwrap();
+
+            keypairs.push(keypair);
+        }
+
+        Self {
+            keypairs,
+            chain: chain.clone(),
+        }
     }
 
-    let mut keypairs = Vec::with_capacity(keystore_paths.len());
-
-    for path in keystore_paths {
-      let keystore = Keystore::from_json_file(path.clone()).unwrap();
-
-      let pubkey = format!("0x{}", keystore.pubkey());
-
-      let mut secret_path = secrets_path.to_path_buf();
-      secret_path.push(pubkey);
-
-      let password = fs::read_to_string(secret_path).unwrap();
-
-      let keypair = keystore.decrypt_keypair(password.as_bytes()).unwrap();
-
-      keypairs.push(keypair);   
+    pub fn get_pubkeys(&self) -> HashSet<ECBlsPublicKey> {
+        self.keypairs
+            .iter()
+            .map(|kp| {
+                ECBlsPublicKey::try_from(kp.pk.serialize().to_vec().as_ref()).expect("valid pubkey")
+            })
+            .collect::<HashSet<_>>()
     }
 
-    Self { keypairs, chain:chain.clone() }
-  }
+    /// Signs a message with the keystore signer and the Commit Boost domain
+    pub fn sign_commit_boost_root(
+        &self,
+        root: [u8; 32],
+        public_key: &ECBlsPublicKey,
+    ) -> Result<BLSSig, KeystoreError> {
+        self.sign_root(root, public_key, self.chain.commit_boost_domain())
+    }
 
-  pub fn get_pubkeys(&self) -> HashSet<ECBlsPublicKey> {
-    self.keypairs
-    .iter()
-    .map(|kp| {
-      ECBlsPublicKey::try_from(kp.pk.serialize().to_vec().as_ref()).expect("valid pubkey")
-    })
-    .collect::<HashSet<_>>()
-  }
+    /// Signs a message with the keystore signer.
+    fn sign_root(
+        &self,
+        root: [u8; 32],
+        public_key: &ECBlsPublicKey,
+        domain: [u8; 32],
+    ) -> Result<BLSSig, KeystoreError> {
+        let sk = self
+            .keypairs
+            .iter()
+            // `as_ssz_bytes` returns the raw bytes we need
+            .find(|kp| kp.pk.as_ssz_bytes() == public_key.as_ref())
+            .ok_or(KeystoreError::UnknownPublicKey(public_key.to_string()))?;
 
-  /// Signs a message with the keystore signer and the Commit Boost domain
-  pub fn sign_commit_boost_root(
-    &self,
-    root: [u8; 32],
-    public_key: &ECBlsPublicKey,
-  ) -> Result<BLSSig, KeystoreError> {
-      self.sign_root(root, public_key, self.chain.commit_boost_domain())
-  }
+        let signing_root = compute_signing_root(root, domain);
 
-  /// Signs a message with the keystore signer.
-  fn sign_root(
-      &self,
-      root: [u8; 32],
-      public_key: &ECBlsPublicKey,
-      domain: [u8; 32],
-  ) -> Result<BLSSig, KeystoreError> {
-      let sk = self
-          .keypairs
-          .iter()
-          // `as_ssz_bytes` returns the raw bytes we need
-          .find(|kp| kp.pk.as_ssz_bytes() == public_key.as_ref())
-          .ok_or(KeystoreError::UnknownPublicKey(public_key.to_string()))?;
+        let sig = sk.sk.sign(signing_root.into()).as_ssz_bytes();
+        let sig = BLSSig::try_from(sig.as_slice())
+            .map_err(|e| KeystoreError::SignatureLength(hex::encode(sig), format!("{e:?}")))?;
 
-      let signing_root = compute_signing_root(root, domain);
-
-      let sig = sk.sk.sign(signing_root.into()).as_ssz_bytes();
-      let sig = BLSSig::try_from(sig.as_slice())
-          .map_err(|e| KeystoreError::SignatureLength(hex::encode(sig), format!("{e:?}")))?;
-
-      Ok(sig)
-  }
-
+        Ok(sig)
+    }
 }
 
 fn read_dir(path: &PathBuf) -> Result<ReadDir, std::io::Error> {
-  fs::read_dir(path)
+    fs::read_dir(path)
 }
 
-fn read_path(entry: std::result::Result<DirEntry, io::Error>) -> Result<PathBuf, std::io::Error>  {
-  Ok(entry?.path())
+fn read_path(entry: std::result::Result<DirEntry, io::Error>) -> Result<PathBuf, std::io::Error> {
+    Ok(entry?.path())
 }
 
 /// A fixed-size byte array for BLS signatures.
 pub type BLSSig = FixedBytes<96>;
-
 
 #[cfg(test)]
 mod tests {
@@ -232,15 +233,15 @@ mod tests {
         let public_key = "0x9612d7a727c9d0a22e185a1c768478dfe919cada9266988cb32359c11f2b7b27f4ae4040902382ae2910c15e2b420d07";
         let chain_config = ChainConfig::default();
 
-        let keystore_path =
-            format!("{}/{}/{}", CARGO_MANIFEST_DIR, KEYSTORES_DEFAULT_PATH_TEST, public_key);
+        let keystore_path = format!(
+            "{}/{}/{}",
+            CARGO_MANIFEST_DIR, KEYSTORES_DEFAULT_PATH_TEST, public_key
+        );
 
         println!("{} keystore path", keystore_path);
         let keystore_path = PathBuf::from(keystore_path);
 
-
         for test_keystore_json in tests_keystore_json {
-
             let mut tmp_keystore_file =
                 File::create(keystore_path.join("test-voting-keystore.json"))
                     .expect("to create new keystore file");
@@ -254,15 +255,14 @@ mod tests {
             let mut tmp_secret_file = File::create(keystores_secrets_path.join(public_key))
                 .expect("to create secret file");
 
-            tmp_secret_file.write_all(password.as_bytes()).expect("to write to temp file");
+            tmp_secret_file
+                .write_all(password.as_bytes())
+                .expect("to write to temp file");
 
             let keys_path = make_path(KEYSTORES_DEFAULT_PATH_TEST);
 
-            let keystore_signer_from_directory = Keystores::new(
-                &keys_path,
-                &keystores_secrets_path,
-                &chain_config,
-            );
+            let keystore_signer_from_directory =
+                Keystores::new(&keys_path, &keystores_secrets_path, &chain_config);
 
             assert_eq!(keystore_signer_from_directory.keypairs.len(), 1);
             assert_eq!(

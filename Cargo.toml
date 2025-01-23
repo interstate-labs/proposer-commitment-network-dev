@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "sidecar",
+    "peripherals/builder-api-extend-module",
+    "peripherals/constraints-collector",
+]

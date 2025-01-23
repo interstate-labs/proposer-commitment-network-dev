@@ -1,5 +1,5 @@
-use std::time::Duration;
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use eyre::{bail, Result};
 use metrics_exporter_prometheus::PrometheusBuilder;
@@ -33,13 +33,31 @@ impl ApiMetrics {
     pub fn describe_all() {
         // Counters
         describe_counter!(HTTP_REQUESTS_COUNTER, "Total number of requests");
-        describe_counter!(PROPOSED_LOCAL_BLOCKS_COUNTER, "Total number of local blocks proposed");
-        describe_counter!(PROPOSED_REMOTE_BLOCKS_COUNTER, "Total number of remote blocks proposed");
+        describe_counter!(
+            PROPOSED_LOCAL_BLOCKS_COUNTER,
+            "Total number of local blocks proposed"
+        );
+        describe_counter!(
+            PROPOSED_REMOTE_BLOCKS_COUNTER,
+            "Total number of remote blocks proposed"
+        );
         describe_counter!(RECEIVED_COMMITMENTS_COUNTER, "Total number of commitments");
-        describe_counter!(APPROVED_COMMITMENTS_COUNTER, "Total number of commitments approved");
-        describe_counter!(PRECONFIRMED_TRANSACTIONS_COUNTER, "Total number of transactions preconfirmed");
-        describe_counter!(VALIDATION_ERRORS_COUNTER, "Total number of validation errors");
-        describe_counter!(GROSS_TIP_REVENUE_COUNTER, "Total number of gross tip revenue");
+        describe_counter!(
+            APPROVED_COMMITMENTS_COUNTER,
+            "Total number of commitments approved"
+        );
+        describe_counter!(
+            PRECONFIRMED_TRANSACTIONS_COUNTER,
+            "Total number of transactions preconfirmed"
+        );
+        describe_counter!(
+            VALIDATION_ERRORS_COUNTER,
+            "Total number of validation errors"
+        );
+        describe_counter!(
+            GROSS_TIP_REVENUE_COUNTER,
+            "Total number of gross tip revenue"
+        );
 
         // Gauges
         describe_gauge!(LATEST_HEAD, "Latest slot");
@@ -52,7 +70,7 @@ impl ApiMetrics {
     }
 
     /// Counters ----------------------------------------------------------------
-
+    #[allow(dead_code)]
     pub fn increment_http_requests_count(method: String, path: String, status: String) {
         counter!(
             HTTP_REQUESTS_DURATION_SECONDS,
@@ -60,11 +78,11 @@ impl ApiMetrics {
         )
         .increment(1);
     }
-
+    #[allow(dead_code)]
     pub fn increment_proposed_local_blocks_count() {
         counter!(PROPOSED_LOCAL_BLOCKS_COUNTER).increment(1);
     }
-
+    #[allow(dead_code)]
     pub fn increment_proposed_remote_blocks_count() {
         counter!(PROPOSED_REMOTE_BLOCKS_COUNTER).increment(1);
     }
@@ -72,11 +90,11 @@ impl ApiMetrics {
     pub fn increment_received_commitments_count() {
         counter!(RECEIVED_COMMITMENTS_COUNTER).increment(1);
     }
-
+    #[allow(dead_code)]
     pub fn increment_approved_commitments_count() {
         counter!(APPROVED_COMMITMENTS_COUNTER).increment(1);
     }
-
+    #[allow(dead_code)]
     pub fn increment_gross_tip_revenue_count(mut tip: u128) {
         // If the tip is too large, we need to split it into multiple u64 parts
         if tip > u64::MAX as u128 {
@@ -97,7 +115,11 @@ impl ApiMetrics {
     }
 
     pub fn increment_preconfirmed_transactions_count(tx_type: TxType) {
-        counter!(PRECONFIRMED_TRANSACTIONS_COUNTER, &[("type", tx_type_str(tx_type))]).increment(1);
+        counter!(
+            PRECONFIRMED_TRANSACTIONS_COUNTER,
+            &[("type", tx_type_str(tx_type))]
+        )
+        .increment(1);
     }
 
     pub fn increment_validation_errors_count(err_type: String) {
@@ -121,7 +143,7 @@ impl ApiMetrics {
     }
 }
 
-pub fn run_metrics_server(metrics_port: u16) -> Result<()> {  
+pub fn run_metrics_server(metrics_port: u16) -> Result<()> {
     let prometheus_addr = SocketAddr::from(([0, 0, 0, 0], metrics_port));
     let builder = PrometheusBuilder::new().with_http_listener(prometheus_addr);
 
@@ -136,15 +158,15 @@ pub fn run_metrics_server(metrics_port: u16) -> Result<()> {
 
     ApiMetrics::describe_all();
 
-  Ok(())
+    Ok(())
 }
 
 fn tx_type_str(tx_type: TxType) -> &'static str {
-  match tx_type {
-      TxType::Legacy => "legacy",
-      TxType::Eip2930 => "eip2930",
-      TxType::Eip1559 => "eip1559",
-      TxType::Eip4844 => "eip4844",
-      TxType::Eip7702 => "eip7702",
-  }
+    match tx_type {
+        TxType::Legacy => "legacy",
+        TxType::Eip2930 => "eip2930",
+        TxType::Eip1559 => "eip1559",
+        TxType::Eip4844 => "eip4844",
+        TxType::Eip7702 => "eip7702",
+    }
 }
