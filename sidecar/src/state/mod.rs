@@ -126,9 +126,14 @@ impl ConstraintState {
     // Find the validator publickey for the given slot
     let public_key = self.find_validator_pubkey_for_slot(request.slot)?;
 
+    if request.txs.len() >= self.max_commitments_in_block {
+        return Err(StateError::Custom("Overflow commitments amount".to_string()));
+    }
+
     // Check if there is room for more commitments
     if let Some(block) = self.blocks.get(&request.slot) {
-        if block.transactions_count() >= self.max_commitments_in_block {
+
+        if block.transactions_count() + request.txs.len() >= self.max_commitments_in_block {
             return Err(StateError::Custom("Overflow commitments amount".to_string()));
         }
     }

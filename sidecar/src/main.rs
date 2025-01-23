@@ -2,7 +2,7 @@ use alloy::{primitives::FixedBytes, rpc::types::beacon::events::HeadEvent};
 use metrics::{run_metrics_server, ApiMetrics};
 use state::{ ConstraintState, HeadEventListener };
 use tokio::sync::mpsc;
-use commitment::request::CommitmentRequestEvent;
+use commitment::request::{CommitmentRequestError, CommitmentRequestEvent};
 use tracing_subscriber::fmt::Subscriber;
 pub use beacon_api_client::mainnet::Client;
 
@@ -135,7 +135,8 @@ async fn main() {
                     },
                     Err(err) => {
                         ApiMetrics::increment_validation_errors_count("validation error".to_string());
-                        tracing::error!(?err, "No available vaildators");
+                        tracing::error!(?err, "validation error");
+                        res.send(Err(CommitmentRequestError::Custom(err.to_string()))).err();
                     }
                 };
             },
