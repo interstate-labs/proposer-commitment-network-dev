@@ -11,24 +11,24 @@ Interstate's design optionally allows multiple preconfirmations sidecars to run 
 
 
 ## How to install
-`
+```
 git clone https://github.com/interstate-labs/proposer-commitment-network.git
 cd proposer-commitment-network
-`
+```
 
 ## Using cargo
-`
+```
 cargo build
 cargo run
-`
+```
 
 # Preconfirmation request RPC interface
 ## Endpoint
-`{SIDECAR_URL}/api/v1/preconfirmation`
+```{SIDECAR_URL}/api/v1/preconfirmation```
 ## Method
-`Post`
+```Post```
 ## Headers
-`Content-Type:application/json`
+```Content-Type:application/json```
 ## Body
 ```
 {
