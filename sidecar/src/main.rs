@@ -154,7 +154,7 @@ async fn main() {
                     Err(err) => tracing::error!(err = ?err, "Error sending constraints")
                 };
 
-                if let Err(e) = fallback_builder.build_fallback_payload(&block).await {
+                if let Err(e) = fallback_builder.build_fallback_payload(&block, slot).await {
                     tracing::error!(err = ?e, "Failed in building fallback payload at slot {slot}");
                 };
 
