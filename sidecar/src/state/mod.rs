@@ -266,10 +266,10 @@ impl ConstraintState {
         self.blocks.remove(&slot);
 
         if epoch != self.current_epoch.value {
+            self.fetch_proposer_duties(epoch).await?;
+
             self.current_epoch.value = epoch;
             self.current_epoch.start_slot = epoch * SLOTS_PER_EPOCH;
-
-            self.fetch_proposer_duties(epoch).await?;
         }
 
         Ok(())
