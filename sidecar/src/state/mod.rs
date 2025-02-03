@@ -142,7 +142,7 @@ impl ConstraintState {
     let template_committed_gas =
     self.blocks.get(&request.slot).map(|t| t.committed_gas()).unwrap_or(0);
 
-    if template_committed_gas + request.gas_limit() >= self.max_commitment_gas.into()
+    if template_committed_gas + request.gas_limit() > self.max_commitment_gas.into()
     {
         return Err(StateError::Custom("Overflow gas limit".to_string()));
     }
