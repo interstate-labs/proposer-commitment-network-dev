@@ -215,7 +215,7 @@ impl ConstraintState {
         let _slot_diff = request.slot.saturating_sub(self.latest_slot);
 
         // TODO: Calculate the max possible basefee given the slot diff.
-        if request.slot < self.latest_slot {
+        if request.slot <= self.latest_slot {
             return Err(StateError::Custom(
                 "Target slot is passed already".to_string(),
             ));
