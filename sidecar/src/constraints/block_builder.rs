@@ -53,6 +53,10 @@ use reqwest::{Client, Url};
 use crate::config::Config;
 
 use super::builder::BuilderError;
+use std::time::Duration;
+use tokio::time::timeout;
+
+const GET_BLOCK_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Extra-data payload field used for locally built blocks, decoded in UTF-8.
 ///
@@ -90,7 +94,10 @@ impl BlockBuilder {
 }
 
   pub async fn build_sealed_block( &self, txs: &[TransactionSigned]) -> Result<SealedBlock, BuilderError>  {
-    let latest_block = self.el_rpc_client.get_block(None, true).await?;
+ let latest_block = timeout(GET_BLOCK_TIMEOUT, self.el_rpc_client.get_block(None, true))
+        .await
+        .map_err(|_| BuilderError::Timeout("Getting latest block timed out".into()))?
+        .map_err(BuilderError::RpcError)?;
     tracing::debug!("got latest block");
 
     let withdrawals = self.beacon_rpc_client.get_expected_withdrawals(StateId::Head, None).await?.into_iter().map(convert_withdrawal_from_consensus_to_alloy).collect::<Vec<_>>();

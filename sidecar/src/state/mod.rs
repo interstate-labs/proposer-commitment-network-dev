@@ -10,7 +10,7 @@ use tokio::{sync::broadcast, task::AbortHandle};
 use reth_primitives::{ PooledTransactionsElement, TransactionSigned };
 use futures::{future::poll_fn, Future, FutureExt};
 use tokio::time::Sleep;
-
+use tokio::time::error::Elapsed;
 use ethereum_consensus::{crypto::PublicKey as ECBlsPublicKey, deneb:: { BeaconBlockHeader, mainnet::{Blob, BlobsBundle} }, crypto::{KzgCommitment, KzgProof}, phase0::mainnet::SLOTS_PER_EPOCH};
 
 use crate::{constraints::{SignedConstraints, TransactionExt}, metrics::ApiMetrics};
@@ -30,7 +30,11 @@ pub enum StateError {
   #[error("Beacon API error: {0}")]
   BeaconApiError(#[from] beacon_api_client::Error),
   #[error("{0}")]
-  Custom(String)
+  Custom(String),
+  #[error("Maximum retries exceeded for get_beacon_header")]
+  MaxRetriesExceeded,
+  #[error("Timeout error: {0}")]
+  Timeout(Elapsed),
 }
 
 #[derive(Debug, Default)]
@@ -59,6 +63,13 @@ pub struct ConstraintState {
 
   pub beacon_client: Client
 }
+
+use tokio::time::timeout;
+use futures::future::{join_all, try_join_all};
+
+const TIMEOUT_SECS: u64 = 10;
+const MAX_RETRIES: u8 = 5;
+const RETRY_BACKOFF_MILLIS: u64 = 100;
 
 impl ConstraintState {
   pub fn new (beacon_client: Client, validator_indexes: ValidatorIndexes, commitment_deadline_duration: Duration) -> Self {
@@ -198,16 +209,43 @@ impl ConstraintState {
     Ok(())
   }
 
+  async fn get_beacon_header_with_retry(&self, head: u64) -> Result<BeaconBlockHeader, StateError> {
+    let mut retries_remaining = MAX_RETRIES;
+    let mut backoff_millis = RETRY_BACKOFF_MILLIS;
+
+    loop {
+        let result = timeout(
+            Duration::from_secs(TIMEOUT_SECS),
+            self.beacon_client.get_beacon_header(BlockId::Slot(head)),
+        )
+        .await
+        .map_err(StateError::Timeout)?;
+
+        if let Ok(update) = result {
+            return Ok(update.header.message);
+        }
+
+        if retries_remaining == 0 {
+            return Err(StateError::MaxRetriesExceeded);
+        }
+
+        retries_remaining -= 1;
+        tokio::time::sleep(Duration::from_millis(backoff_millis)).await;
+        backoff_millis *= 2;
+    }
+}
+
   pub async fn update_head(&mut self, head: u64) -> Result<(), StateError> {
     self.commitment_deadline =
         CommitmentDeadline::new(head + 1, self.deadline_duration);
 
-    let update = self
-        .beacon_client
-        .get_beacon_header(BlockId::Slot(head))
-        .await?;
+    // let update = self
+    //     .beacon_client
+    //     .get_beacon_header(BlockId::Slot(head))
+    //     .await?;
 
-    self.header = update.header.message;
+    // self.header = update.header.message;
+    self.header = self.get_beacon_header_with_retry(head).await?;
 
     self.latest_slot_timestamp = Instant::now();
     self.latest_slot = head;
