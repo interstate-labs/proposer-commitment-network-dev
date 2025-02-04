@@ -93,12 +93,39 @@ impl BlockBuilder {
     }
 }
 
+const MAX_RETRIES: u32 = 5;
+const RETRY_DELAY: Duration = Duration::from_secs(2);
+
+// ... existing code ...
+
+async fn get_latest_block(&self) -> Result<Block, BuilderError> {
+    let mut retries = 0;
+    loop {
+        let res = timeout(
+            GET_BLOCK_TIMEOUT,
+            self.el_rpc_client.get_block(None, true),
+        )
+        .await;
+
+        match res {
+            Ok(block) => {
+                tracing::debug!("got latest block");
+                return block.map_err(BuilderError::RpcError);
+            }
+            Err(_) if retries <Self::MAX_RETRIES => {
+                retries += 1;
+                tokio::time::sleep(Self::RETRY_DELAY).await;
+            }
+            Err(err) => return Err(BuilderError::Timeout(format!("Getting latest block timed out after {} retries: {}", Self::MAX_RETRIES, err))),
+        }
+    }
+}
+
+
   pub async fn build_sealed_block( &self, txs: &[TransactionSigned]) -> Result<SealedBlock, BuilderError>  {
- let latest_block = timeout(GET_BLOCK_TIMEOUT, self.el_rpc_client.get_block(None, true))
-        .await
-        .map_err(|_| BuilderError::Timeout("Getting latest block timed out".into()))?
-        .map_err(BuilderError::RpcError)?;
-    tracing::debug!("got latest block");
+
+
+let latest_block = self.get_latest_block().await?;
 
     let withdrawals = self.beacon_rpc_client.get_expected_withdrawals(StateId::Head, None).await?.into_iter().map(convert_withdrawal_from_consensus_to_alloy).collect::<Vec<_>>();
     tracing::debug!("got withdrawals");
