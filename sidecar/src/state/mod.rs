@@ -12,10 +12,10 @@ use futures::{future::poll_fn, Future, FutureExt};
 use tokio::time::Sleep;
 
 use ethereum_consensus::{crypto::PublicKey as ECBlsPublicKey, deneb:: { BeaconBlockHeader, mainnet::{Blob, BlobsBundle} }, crypto::{KzgCommitment, KzgProof}, phase0::mainnet::SLOTS_PER_EPOCH};
-
 use crate::{constraints::{SignedConstraints, TransactionExt}, metrics::ApiMetrics};
 use crate::commitment::request::PreconfRequest;
 use crate::config::ValidatorIndexes;
+use crate::config::ChainConfig;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
@@ -29,6 +29,8 @@ pub enum StateError {
   FailedFetcingProposerDuties,
   #[error("Beacon API error: {0}")]
   BeaconApiError(#[from] beacon_api_client::Error),
+  #[error("Preconf request does not indicate it is mainnet, yet the sidecar is configured to run on mainnet")]
+  InvalidChain(),
   #[error("{0}")]
   Custom(String)
 }
@@ -56,8 +58,8 @@ pub struct ConstraintState {
   pub block_gas_limit: u64,
   pub max_tx_input_bytes: usize,
   pub max_init_code_byte_size: usize,
-
-  pub beacon_client: Client
+  pub beacon_client: Client,
+  pub config: ChainConfig,
 }
 
 impl ConstraintState {
@@ -78,6 +80,7 @@ impl ConstraintState {
       block_gas_limit: 30_000_000,
       max_tx_input_bytes: 4 * 32 * 1024,
       max_init_code_byte_size: 2 * 24576,
+      config: Default::default(),
     }
   }
   
@@ -110,7 +113,15 @@ impl ConstraintState {
   }
 
   pub fn validate_preconf_request(&self, request: &PreconfRequest) -> Result<ECBlsPublicKey, StateError> {
-  
+    // Check if the chain is eth mainnet
+      if request.chain_id != self.config.id {
+          return Err(StateError::Custom(format!(
+              "Invalid chain ID: expected {}, got {:?}",
+              self.config.id,
+              request.chain_id
+          )));
+      }
+
     // Check if the slot is in the current epoch
     if request.slot < self.current_epoch.start_slot || request.slot >= self.current_epoch.start_slot + SLOTS_PER_EPOCH {
         return Err(StateError::InvalidSlot(request.slot));
