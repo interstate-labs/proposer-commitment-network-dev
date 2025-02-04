@@ -10,6 +10,7 @@ use axum::{
 };
 use axum_client_ip::{InsecureClientIp, SecureClientIp, SecureClientIpSource};
 use serde::Serialize;
+use serde_json::{from_value, Value};
 use std::{net::SocketAddr, sync::Arc, time::Instant};
 use tokio::sync::mpsc;
 
@@ -18,6 +19,7 @@ use crate::{
     commitment::request::{
         CommitmentRequestError, CommitmentRequestEvent, CommitmentRequestHandler, PreconfRequest,
     },
+    constraints::SignedConstraints,
     metrics::ApiMetrics,
 };
 
@@ -58,9 +60,16 @@ async fn handle_preconfirmation(
     Json(body): Json<PreconfRequest>,
 ) -> Result<Json<PreconfResponse>, CommitmentRequestError> {
     match handler.handle_commitment_request(&body).await {
-        Ok(_) => {
-            let response = PreconfResponse { ok: true };
-
+        Ok(value) => {
+            let signed_contraints_list = value
+                .get("signed_contraints_list")
+                .and_then(|v| from_value::<Vec<SignedConstraints>>(v.clone()).ok()) // Deserialize safely
+                .unwrap_or_default(); // If None or error, return an empty Vec;
+            
+            let response = PreconfResponse {
+                ok: true,
+                signed_contraints_list: signed_contraints_list,
+            };
             return Ok(Json(response));
         }
         Err(e) => return Err(e),
@@ -94,6 +103,7 @@ async fn handle_preconfirmation(
 #[derive(Serialize)]
 pub struct PreconfResponse {
     pub ok: bool,
+    pub signed_contraints_list: Vec<SignedConstraints>,
 }
 
 impl axum::response::IntoResponse for CommitmentRequestError {
