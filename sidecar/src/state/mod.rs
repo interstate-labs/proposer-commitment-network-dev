@@ -98,6 +98,7 @@ impl ConstraintState {
             block_gas_limit: 30_000_000,
             max_tx_input_bytes: 4 * 32 * 1024,
             max_init_code_byte_size: 2 * 24576,
+            config: Default::default(),
         }
     }
 
