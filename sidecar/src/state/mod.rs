@@ -31,6 +31,7 @@ use crate::{
     constraints::{SignedConstraints, TransactionExt},
     metrics::ApiMetrics,
 };
+use crate::config::ChainConfig;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
@@ -71,7 +72,7 @@ pub struct ConstraintState {
     pub block_gas_limit: u64,
     pub max_tx_input_bytes: usize,
     pub max_init_code_byte_size: usize,
-
+    pub config: ChainConfig,
     pub beacon_client: Client,
 }
 
@@ -97,6 +98,7 @@ impl ConstraintState {
             block_gas_limit: 30_000_000,
             max_tx_input_bytes: 4 * 32 * 1024,
             max_init_code_byte_size: 2 * 24576,
+            config: Default::default(),
         }
     }
 
@@ -141,6 +143,15 @@ impl ConstraintState {
         &self,
         request: &PreconfRequest,
     ) -> Result<ECBlsPublicKey, StateError> {
+        // Check if the chain is eth mainnet
+        if request.chain_id != self.config.id {
+            return Err(StateError::Custom(format!(
+                "Invalid chain ID: expected {}, got {:?}",
+                self.config.id,
+                request.chain_id
+            )));
+        }
+
         // Check if the slot is in the current epoch
         if request.slot < self.current_epoch.start_slot
             || request.slot >= self.current_epoch.start_slot + SLOTS_PER_EPOCH

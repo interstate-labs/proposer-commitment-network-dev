@@ -93,6 +93,8 @@ pub struct PreconfRequest {
   pub signature: PrimitiveSignature,
 
   pub(crate) sender: Address,
+
+  pub chain_id: u64
 }
 
 impl PreconfRequest {
