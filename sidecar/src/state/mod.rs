@@ -238,12 +238,8 @@ impl ConstraintState {
     self.commitment_deadline =
         CommitmentDeadline::new(head + 1, self.deadline_duration);
 
-    // let update = self
-    //     .beacon_client
-    //     .get_beacon_header(BlockId::Slot(head))
-    //     .await?;
 
-    // self.header = update.header.message;
+  
     self.header = self.get_beacon_header_with_retry(head).await?;
 
     self.latest_slot_timestamp = Instant::now();
