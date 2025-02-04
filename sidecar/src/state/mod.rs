@@ -234,15 +234,30 @@ impl ConstraintState {
     }
 
     async fn fetch_proposer_duties(&mut self, epoch: u64) -> Result<(), StateError> {
-        match self
-            .beacon_client
-            .get_proposer_duties(epoch)
-            .await
-            .map_err(|_| StateError::FailedFetcingProposerDuties)
-        {
-            Ok(duties) => self.current_epoch.proposer_duties = duties.1,
-            Err(err) => return Err(err),
-        };
+        // Retry settings
+        let retry_delay = Duration::from_secs(2);
+        let max_retries = 5;
+
+        let mut retries = 0;
+
+        loop {
+            match self
+                .beacon_client
+                .get_proposer_duties(epoch)
+                .await
+                .map_err(|_| StateError::FailedFetcingProposerDuties)
+            {
+                Ok(duties) => {
+                    self.current_epoch.proposer_duties = duties.1;
+                    break;
+                }
+                Err(_) if retries < max_retries => {
+                    retries += 1;
+                    tokio::time::sleep(retry_delay).await;
+                }
+                Err(err) => return Err(err),
+            };
+        }
         Ok(())
     }
 
