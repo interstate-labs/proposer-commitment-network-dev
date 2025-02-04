@@ -70,7 +70,6 @@ async fn handle_preconfirmation(
                 ok: true,
                 signed_contraints_list: signed_contraints_list,
             };
-
             return Ok(Json(response));
         }
         Err(e) => return Err(e),
@@ -114,10 +113,10 @@ impl axum::response::IntoResponse for CommitmentRequestError {
                 (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response()
             }
             CommitmentRequestError::Parse(err) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response()
+                (StatusCode::BAD_REQUEST, err.to_string()).into_response()
             }
             CommitmentRequestError::NotAllowedIP(ip) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, ip).into_response()
+                (StatusCode::UNAUTHORIZED, ip).into_response()
             }
         }
     }
