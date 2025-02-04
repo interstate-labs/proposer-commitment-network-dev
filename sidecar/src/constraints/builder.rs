@@ -55,7 +55,7 @@ pub struct PayloadAndBid {
     pub payload: GetPayloadResponse,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize,Clone)]
 #[serde(tag = "version", content = "data")]
 pub enum GetPayloadResponse {
     #[serde(rename = "bellatrix")]
