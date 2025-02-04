@@ -13,6 +13,7 @@ use ethereum_consensus::{
   Fork,
 };
 use blst::min_pk::SecretKey as BLSSecretKey;
+use alloy::transports::TransportError;
 
 use crate::config::{ChainConfig, Config};
 use crate::state::Block;
@@ -238,5 +239,9 @@ pub enum BuilderError {
     InvalidEngineHint(String),
     #[error("Failed to build payload: {0}")]
     Custom(String),
+    #[error("TimeOut")]
+    Timeout(String),
+    #[error("TransportError")]
+    RpcError(TransportError),
 }
 
