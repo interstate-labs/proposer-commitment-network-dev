@@ -29,8 +29,6 @@ pub enum StateError {
   FailedFetcingProposerDuties,
   #[error("Beacon API error: {0}")]
   BeaconApiError(#[from] beacon_api_client::Error),
-  #[error("Preconf request does not indicate it is mainnet, yet the sidecar is configured to run on mainnet")]
-  InvalidChain(),
   #[error("{0}")]
   Custom(String)
 }
