@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 use tracing_subscriber::fmt::Subscriber;
 
 use env_file_reader::read_file;
-
+use tokio::sync::oneshot::Sender;
 use commitment::{run_commitment_rpc_server, PreconfResponse};
 use config::Config;
 use constraints::{
@@ -30,6 +30,110 @@ mod utils;
 
 pub type BLSBytes = FixedBytes<96>;
 pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
+
+
+async fn handle_preconfirmation_request(
+    req: CommitmentRequestEvent,
+    res: mpsc::Sender<Result<serde_json::Value, CommitmentRequestError>>,
+    keystores: &Keystores,
+    constraint_state: &mut ConstraintState,
+    commit_boost_api: &impl CommitBoostApi,
+) {
+    tracing::info!("Received preconfirmation request");
+    ApiMetrics::increment_received_commitments_count();
+
+    let slot = req.slot;
+    let pubkeys = keystores.get_pubkeys();
+
+    match constraint_state.validate_preconf_request(&req) {
+        Ok(pubkey) => {
+            if !pubkeys.contains(&pubkey) {
+                tracing::error!("Not available validator in slot {} to sign in sidecar", slot);
+                return;
+            }
+
+            // TODO::Validate preconfirmation request
+            let mut signed_contraints_list: Vec<SignedConstraints> = vec![];
+
+            for tx in req.txs.iter() {
+                let message = ConstraintsMessage::from_tx(pubkey.clone(), slot, tx.clone());
+                let digest = message.digest();
+
+                let signature = keystores.sign_commit_boost_root(digest, &pubkey);
+
+                let signed_constraints = match signature {
+                    Ok(signature) => SignedConstraints { message, signature },
+                    Err(e) => {
+                        tracing::error!(?e, "Failed to sign constraints");
+                        return;
+                    }
+                };
+
+                ApiMetrics::increment_preconfirmed_transactions_count(tx.tx.tx_type());
+
+                constraint_state.add_constraint(slot, signed_constraints.clone());
+                signed_contraints_list.push(signed_constraints.clone());
+
+                // match commit_boost_api.send_constraints_to_be_collected(&vec![signed_constraints.clone()]).await {
+                //     Ok(_) => tracing::info!(?signed_constraints,"Sent constratins successfully to be collected."),
+                //     Err(err) => tracing::error!(err = ?err, "Error sending constraints to be collected")
+                // };
+            }
+            let response = serde_json::to_value(PreconfResponse { ok: true, signed_contraints_list }).map_err(Into::into);
+            let _ = res.send(response).ok();
+        },
+        Err(err) => {
+            ApiMetrics::increment_validation_errors_count("validation error".to_string());
+            tracing::error!(?err, "validation error");
+            res.send(Err(CommitmentRequestError::Custom(err.to_string()))).err();
+        }
+    };
+}
+
+async fn handle_commitment_deadline(
+    slot: u64,
+    constraint_state: &mut ConstraintState,
+    commit_boost_api: &impl CommitBoostApi,
+    fallback_builder: &mut FallbackBuilder
+) {
+    tracing::info!("The commitment deadline is reached in slot {}", slot);
+
+    let Some(block) = constraint_state.remove_constraints_at_slot(slot) else {
+        tracing::debug!("Couldn't find a block at slot {slot}");
+        continue;
+    };
+    tracing::debug!("removed constraints at slot {slot}");
+
+    match commit_boost_api.send_constraints(&block.signed_constraints_list).await {
+        Ok(_) => tracing::info!("Sent constratins successfully."),
+        Err(err) => tracing::error!(err = ?err, "Error sending constraints")
+    };
+
+    if let Err(e) = fallback_builder.build_fallback_payload(&block, slot).await {
+        tracing::error!(err = ?e, "Failed in building fallback payload at slot {slot}");
+    };
+}
+
+async fn handle_local_payload_request(
+    slot: u64,
+    fallback_builder: &mut FallbackBuilder,
+    response_tx: Sender<Option<PayloadAndBid>>,
+) {
+    tracing::info!(slot, "Received local payload request");
+
+    let Some(payload_and_bid) = fallback_builder.get_cached_payload() else {
+        tracing::warn!("No local payload found for {slot}");
+        let _ = response_tx.send(None);
+        return;
+    };
+
+    if let Err(e) = response_tx.send(Some(payload_and_bid)) {
+        tracing::error!(err = ?e, "Failed to send payload and bid in response channel");
+    } else {
+        tracing::debug!("Sent payload and bid to response channel");
+    }
+}
+
 
 #[tokio::main]
 async fn main() {
@@ -98,92 +202,17 @@ async fn main() {
     loop {
         tokio::select! {
             Some( CommitmentRequestEvent{req, res} ) = receiver.recv() => {
-                tracing::info!("Received preconfirmation request");
-                ApiMetrics::increment_received_commitments_count();
-
-                let slot = req.slot;
-                let pubkeys = keystores.get_pubkeys();
-
-                match constraint_state.validate_preconf_request(&req) {
-                    Ok(pubkey) => {
-
-                        if !pubkeys.contains(&pubkey) {
-                            tracing::error!("Not available validator in slot {} to sign in sidecar", slot);
-                            return;
-                        }
-
-                        // TODO::Validate preconfirmation request
-                        let mut signed_contraints_list: Vec<SignedConstraints> = vec![];
-
-                        for tx in req.txs.iter() {
-                            let message =
-                                ConstraintsMessage::from_tx(pubkey.clone(), slot, tx.clone());
-                            let digest = message.digest();
-
-                            let signature = keystores.sign_commit_boost_root(digest, &pubkey);
-
-                            let signed_constraints = match signature {
-                                Ok(signature) => SignedConstraints { message, signature },
-                                Err(e) => {
-                                    tracing::error!(?e, "Failed to sign constraints");
-                                    return;
-                                }
-                            };
-
-                            ApiMetrics::increment_preconfirmed_transactions_count(tx.tx.tx_type());
-
-                            constraint_state.add_constraint(slot, signed_constraints.clone());
-                            signed_contraints_list.push(signed_constraints.clone());
-
-                            // match commit_boost_api.send_constraints_to_be_collected(&vec![signed_constraints.clone()]).await {
-                            //     Ok(_) => tracing::info!(?signed_constraints,"Sent constratins successfully to be collected."),
-                            //     Err(err) => tracing::error!(err = ?err, "Error sending constraints to be collected")
-                            // };
-
-                        }
-                        let response = serde_json::to_value( PreconfResponse { ok: true, signed_contraints_list}).map_err(Into::into);
-                        let _ = res.send(response).ok();
-                    },
-                    Err(err) => {
-                        ApiMetrics::increment_validation_errors_count("validation error".to_string());
-                        tracing::error!(?err, "validation error");
-                        res.send(Err(CommitmentRequestError::Custom(err.to_string()))).err();
-                    }
-                };
+                tokio::spawn(async move {
+                    handle_preconfirmation_request(req, res, &keystores, &mut constraint_state, &commit_boost_api);
+                });
             },
             Some(slot) = constraint_state.commitment_deadline.wait() => {
-                tracing::info!("The commitment deadline is reached in slot {}", slot);
-
-                let Some(block) = constraint_state.remove_constraints_at_slot(slot) else {
-                    tracing::debug!("Couldn't find a block at slot {slot}");
-                    continue;
-                };
-                tracing::debug!("removed constraints at slot {slot}");
-
-                match commit_boost_api.send_constraints(&block.signed_constraints_list).await {
-                    Ok(_) => tracing::info!("Sent constratins successfully."),
-                    Err(err) => tracing::error!(err = ?err, "Error sending constraints")
-                };
-
-                if let Err(e) = fallback_builder.build_fallback_payload(&block, slot).await {
-                    tracing::error!(err = ?e, "Failed in building fallback payload at slot {slot}");
-                };
-
+                tokio::spawn(async move {
+                    handle_commitment_deadline(slot, &mut constraint_state, &commit_boost_api, &mut fallback_builder).await;
+                });
             },
             Some(FetchPayloadRequest { slot, response_tx }) = payload_rx.recv() => {
-                tracing::info!(slot, "Received local payload request");
-
-                let Some(payload_and_bid) = fallback_builder.get_cached_payload() else  {
-                        tracing::warn!("No local payload found for {slot}");
-                        let _ = response_tx.send(None);
-                        continue;
-                };
-
-                if let Err(e) = response_tx.send(Some(payload_and_bid)) {
-                    tracing::error!(err = ?e, "Failed to send payload and bid in response channel");
-                } else {
-                    tracing::debug!("Sent payload and bid to response channel");
-                }
+                handle_local_payload_request(slot, &mut fallback_builder, response_tx).await;
             },
             // Some(Ok(msg)) = read.next() => {
             //     if let tokio_tungstenite::tungstenite::protocol::Message::Text(text) = msg {
