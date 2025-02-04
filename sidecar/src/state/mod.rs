@@ -12,7 +12,6 @@ use futures::{future::poll_fn, Future, FutureExt};
 use tokio::time::Sleep;
 use tokio::time::error::Elapsed;
 use ethereum_consensus::{crypto::PublicKey as ECBlsPublicKey, deneb:: { BeaconBlockHeader, mainnet::{Blob, BlobsBundle} }, crypto::{KzgCommitment, KzgProof}, phase0::mainnet::SLOTS_PER_EPOCH};
-
 use crate::{constraints::{SignedConstraints, TransactionExt}, metrics::ApiMetrics};
 use crate::commitment::request::PreconfRequest;
 use crate::config::ValidatorIndexes;

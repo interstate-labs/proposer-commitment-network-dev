@@ -375,31 +375,6 @@ impl CommitBoostApi {
     }
 
 
-    // Constraints API
-    // pub async fn send_constraints(
-    //     &self,
-    //     constraints: &Vec<SignedConstraints>,
-    // ) -> Result<(), CommitBoostError> {
-
-    //     let response = self
-    //         .client
-    //         .post(self.url.join(CONSTRAINTS_PATH).unwrap())
-    //         .header("content-type", "application/json")
-    //         .body(serde_json::to_vec(&constraints)?)
-    //         .send()
-    //         .await?;
-
-    //     // let response_text = response.clone().text().await?;
-    //     // tracing::info!("response status: {}", response.status());
-
-    //     if response.status() != StatusCode::OK {
-    //         let error = response.json::<ErrorResponse>().await?;
-    //         return Err(CommitBoostError::FailedSubmittingConstraints(error));
-    //     }
-
-    //     Ok(())
-    // }
-
     pub async fn send_constraints(
         &self,
         constraints: &Vec<SignedConstraints>,
