@@ -62,10 +62,17 @@ impl CommitmentRequestHandler{
       // TODO: format the user response to be more clear. Right now it's just the raw
       // signed constraints object.
       // Docs: https://chainbound.github.io/bolt-docs/api/commitments-api#bolt_inclusionpreconfirmation
-      Ok(event_response) => event_response,
+      Ok(event_response) => {
+        match event_response {
+          Ok(data) => Ok(data),
+          Err(e) => {
+            Err(e)
+          }
+        }
+      },
       Err(e) => {
           tracing::error!(err = ?e, "Failed in receiving commitment request event response from event loop");
-          Err(CommitmentRequestError::Custom("Failed in receiving commitment request event response from event loop".to_owned()))
+          Err(CommitmentRequestError::Custom("Failed in receiving commitment request event response from event loop".to_string()))
       }
     }
   }

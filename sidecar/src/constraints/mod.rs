@@ -380,8 +380,6 @@ impl CommitBoostApi {
         constraints: &Vec<SignedConstraints>,
     ) -> Result<(), CommitBoostError> {
 
-        tracing::debug!("constraints to be sent: {:#?}", constraints);
-
         let response = self
             .client
             .post(self.url.join(CONSTRAINTS_PATH).unwrap())

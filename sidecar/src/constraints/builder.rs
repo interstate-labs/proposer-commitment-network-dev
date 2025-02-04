@@ -138,7 +138,7 @@ impl FallbackBuilder {
         }  
     }
 
-    pub async fn build_fallback_payload( &mut self, block: &Block) -> Result<(), BuilderError> {
+    pub async fn build_fallback_payload( &mut self, block: &Block, slot: u64) -> Result<(), BuilderError> {
         let transactions = block.convert_constraints_to_transactions();
         let blobs_bundle = block.parse_to_blobs_bundle();
         let kzg_commitments = blobs_bundle.commitments.clone();
@@ -147,7 +147,7 @@ impl FallbackBuilder {
         // the current head of the chain
         let sealed_block = self
             .block_builder
-            .build_sealed_block(&transactions)
+            .build_sealed_block(&transactions, slot)
             .await?;
 
         // NOTE: we use a big value for the bid to ensure it gets chosen by mev-boost.
