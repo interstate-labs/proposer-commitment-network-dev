@@ -93,10 +93,11 @@ impl BlockBuilder {
     }
 }
 
+
 const MAX_RETRIES: u32 = 5;
 const RETRY_DELAY: Duration = Duration::from_secs(2);
 
-// ... existing code ...
+
 
 async fn get_latest_block(&self) -> Result<Block, BuilderError> {
     let mut retries = 0;
@@ -126,6 +127,7 @@ async fn get_latest_block(&self) -> Result<Block, BuilderError> {
 
 
 let latest_block = self.get_latest_block().await?;
+
 
     let withdrawals = self.beacon_rpc_client.get_expected_withdrawals(StateId::Head, None).await?.into_iter().map(convert_withdrawal_from_consensus_to_alloy).collect::<Vec<_>>();
     tracing::debug!("got withdrawals");
@@ -204,7 +206,7 @@ let latest_block = self.get_latest_block().await?;
         let mut i = 0;
 
         loop {
-            let header = build_header_with_hints_and_context(&latest_block, &hints, &ctx);
+            let header = build_header_with_hints_and_context(&latest_block, genesis_time, slot, &hints, &ctx);
 
             let sealed_hash = header.hash_slow();
             let sealed_header = SealedHeader::new(header, sealed_hash);
@@ -568,6 +570,8 @@ pub(crate) fn parse_geth_response(error: &str) -> Option<String> {
 /// Build a header with the given hints and context values.
 fn build_header_with_hints_and_context(
   latest_block: &Block,
+  genesis_time: u64,
+  slot: u64,
   hints: &Hints,
   context: &Context,
 ) -> Header {
@@ -590,7 +594,7 @@ fn build_header_with_hints_and_context(
       number: latest_block.header.number + 1,
       gas_limit: latest_block.header.gas_limit as u64,
       gas_used,
-      timestamp: latest_block.header.timestamp + context.slot_time_in_seconds,
+      timestamp: genesis_time + slot * context.slot_time_in_seconds,
       mix_hash: context.prev_randao,
       nonce: B64::ZERO,
       base_fee_per_gas: Some(context.base_fee),
