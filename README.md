@@ -7,33 +7,6 @@ Interstate is an extension to the PBS / MEV-Boost pipeline which enables instant
 
 ![Full Design](static/flow.jpg)
 
+We follow the common api spec that nearly all preconfirmation protocols follow: https://github.com/ethereum-commitments/constraints-specs
+Docs page: docs.interstate.so
 
-## How to install
-```
-git clone https://github.com/interstate-labs/proposer-commitment-network.git
-cd proposer-commitment-network
-```
-
-## Using cargo
-```
-cargo build
-cargo run
-```
-
-# Preconfirmation request RPC interface
-## Endpoint
-```{SIDECAR_URL}/api/v1/preconfirmation```
-## Method
-```Post```
-## Headers
-```Content-Type:application/json```
-## Body
-```
-{
-  tx: signed raw transaction,
-  slot: target slot number,
-  sender: signer address
-}
-```
-## Response
-`ok:true`
