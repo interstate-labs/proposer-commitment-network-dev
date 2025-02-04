@@ -79,21 +79,12 @@ impl ApiMetrics {
 
     pub fn increment_gross_tip_revenue_count(mut tip: u128) {
         // If the tip is too large, we need to split it into multiple u64 parts
-        if tip > u64::MAX as u128 {
-            let mut parts = Vec::new();
-            while tip > u64::MAX as u128 {
-                parts.push(u64::MAX);
-                tip -= u64::MAX as u128;
-            }
-
-            parts.push(tip as u64);
-
-            for part in parts {
-                counter!(GROSS_TIP_REVENUE_COUNTER).increment(part);
-            }
-        } else {
-            counter!(GROSS_TIP_REVENUE_COUNTER).increment(tip as u64);
+        while tip > u64::MAX as u128 {
+            counter!(GROSS_TIP_REVENUE_COUNTER).increment(u64::MAX);
+            tip -= u64::MAX as u128;
         }
+    
+        counter!(GROSS_TIP_REVENUE_COUNTER).increment(tip as u64);
     }
 
     pub fn increment_preconfirmed_transactions_count(tx_type: TxType) {
