@@ -7,8 +7,6 @@ Interstate is an extension to the PBS / MEV-Boost pipeline which enables instant
 
 ![Full Design](static/flow.jpg)
 
-Interstate's design optionally allows multiple preconfirmations sidecars to run on the same validator. This design promotes decentralization: https://docs.interstate.so/research/multiparty-preconf. 
-
 
 ## How to install
 ```
