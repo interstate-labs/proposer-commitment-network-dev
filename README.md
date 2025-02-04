@@ -7,6 +7,5 @@ Interstate is an extension to the PBS / MEV-Boost pipeline which enables instant
 
 ![Full Design](static/flow.jpg)
 
-We follow the common api spec that nearly all preconfirmation protocols follow: https://github.com/ethereum-commitments/constraints-specs
-Docs page: docs.interstate.so
+We follow the common api spec that nearly all preconfirmation protocols follow. Read the full docs at: https://docs.interstate.so
 
