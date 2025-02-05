@@ -12,6 +12,7 @@ use constraints::{run_constraints_proxy_server, ConstraintsMessage, FallbackBuil
 use commitment::{run_commitment_rpc_server, PreconfResponse};
 use config::Config;
 use keystores::Keystores;
+use crate::state::Block;
 
 mod commitment;
 mod state;
@@ -141,11 +142,14 @@ async fn main() {
             },
             Some(slot) = constraint_state.commitment_deadline.wait() => {
                 tracing::info!("The commitment deadline is reached in slot {}", slot);
-
-                let Some(block) = constraint_state.remove_constraints_at_slot(slot) else {
+                let mut block = Block::default();
+                if let Some(b) = constraint_state.remove_constraints_at_slot(slot) {
+                    block = b;
+                } else {
                     tracing::debug!("Couldn't find a block at slot {slot}");
-                    continue;
-                };
+                    let block = Block::default();
+                }
+                
                 tracing::debug!("removed constraints at slot {slot}");
 
                 match commit_boost_api.send_constraints(&block.signed_constraints_list).await {
