@@ -1,41 +1,42 @@
 use alloy::{primitives::FixedBytes, rpc::types::beacon::events::HeadEvent};
-use metrics::{run_metrics_server, ApiMetrics};
-use state::{ ConstraintState, HeadEventListener };
-use tokio::sync::mpsc;
-use commitment::request::CommitmentRequestEvent;
-use tracing_subscriber::fmt::Subscriber;
 pub use beacon_api_client::mainnet::Client;
+use commitment::request::{CommitmentRequestError, CommitmentRequestEvent};
+use metrics::{run_metrics_server, ApiMetrics};
+use state::{ConstraintState, HeadEventListener};
+use tokio::sync::mpsc;
+use tracing_subscriber::fmt::Subscriber;
 
 use env_file_reader::read_file;
 
-use constraints::{run_constraints_proxy_server, ConstraintsMessage, FallbackBuilder, FallbackPayloadFetcher, FetchPayloadRequest, SignedConstraints, TransactionExt };
 use commitment::{run_commitment_rpc_server, PreconfResponse};
 use config::Config;
+use constraints::{
+    run_constraints_proxy_server, ConstraintsMessage, FallbackBuilder, FallbackPayloadFetcher,
+    FetchPayloadRequest, SignedConstraints, TransactionExt,
+};
 use keystores::Keystores;
 
 mod commitment;
-mod state;
-mod constraints;
-mod errors;
 mod config;
-mod test_utils;
-mod utils;
+mod constraints;
+mod delegation;
+mod errors;
 mod keystores;
 mod metrics;
-mod delegation;
 mod onchain;
+mod state;
+mod test_utils;
+mod utils;
 
 pub type BLSBytes = FixedBytes<96>;
 pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
 #[tokio::main]
 async fn main() {
-
     let subscriber = Subscriber::builder()
-    .with_max_level(tracing::Level::DEBUG)
-    .finish();
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
+        .with_max_level(tracing::Level::DEBUG)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     // let config = Config::parse_from_cli().unwrap();
     tracing::info!("path: {}", env!["CARGO_MANIFEST_DIR"]);
@@ -43,27 +44,35 @@ async fn main() {
     env_path.push_str("/.env");
     let envs = read_file(env_path).unwrap();
 
-    let ( sender, mut receiver ) = mpsc::channel(1024);
+    let (sender, mut receiver) = mpsc::channel(1024);
     let config = Config::new(envs);
 
-    let keystores = Keystores::new(&config.keystore_pubkeys_path, &config.keystore_secrets_path, &config.chain);
+    let keystores = Keystores::new(
+        &config.keystore_pubkeys_path,
+        &config.keystore_secrets_path,
+        &config.chain,
+    );
 
     let _ = run_metrics_server(config.metrics_port);
-
 
     run_commitment_rpc_server(sender, &config).await;
 
     let (payload_tx, mut payload_rx) = mpsc::channel(16);
     let payload_fetcher = FallbackPayloadFetcher::new(payload_tx);
 
-    let commit_boost_api = run_constraints_proxy_server(&config, payload_fetcher).await.unwrap();
+    let commit_boost_api = run_constraints_proxy_server(&config, payload_fetcher)
+        .await
+        .unwrap();
 
     let beacon_client = Client::new(config.beacon_api_url.clone());
 
     // let mut constraint_state = Arc::new(RwLock::new(ConstraintState::new( beacon_client.clone(), config.validator_indexes.clone(), config.chain.get_commitment_deadline_duration()))) ;
-    let mut constraint_state = ConstraintState::new( beacon_client.clone(), config.validator_indexes.clone(), config.chain.get_commitment_deadline_duration()) ;
+    let mut constraint_state = ConstraintState::new(
+        beacon_client.clone(),
+        config.validator_indexes.clone(),
+        config.chain.get_commitment_deadline_duration(),
+    );
 
-   
     let mut head_event_listener = HeadEventListener::run(beacon_client);
 
     let mut fallback_builder = FallbackBuilder::new(&config);
@@ -103,7 +112,8 @@ async fn main() {
                             return;
                         }
 
-                        // TODO::Validate preconfirmation request      
+                        // TODO::Validate preconfirmation request
+                        let mut signed_contraints_list: Vec<SignedConstraints> = vec![];
 
                         for tx in req.txs.iter() {
                             let message =
@@ -122,20 +132,22 @@ async fn main() {
 
                             ApiMetrics::increment_preconfirmed_transactions_count(tx.tx.tx_type());
 
-                            constraint_state.add_constraint(slot, signed_constraints);
-                                    
+                            constraint_state.add_constraint(slot, signed_constraints.clone());
+                            signed_contraints_list.push(signed_constraints.clone());
+
                             // match commit_boost_api.send_constraints_to_be_collected(&vec![signed_constraints.clone()]).await {
                             //     Ok(_) => tracing::info!(?signed_constraints,"Sent constratins successfully to be collected."),
                             //     Err(err) => tracing::error!(err = ?err, "Error sending constraints to be collected")
-                            // };                            
+                            // };
 
-                        }        
-                        let response = serde_json::to_value( PreconfResponse { ok: true}).map_err(Into::into);
-                        let _ = res.send(response).ok();          
+                        }
+                        let response = serde_json::to_value( PreconfResponse { ok: true, signed_contraints_list}).map_err(Into::into);
+                        let _ = res.send(response).ok();
                     },
                     Err(err) => {
                         ApiMetrics::increment_validation_errors_count("validation error".to_string());
-                        tracing::error!(?err, "No available vaildators");
+                        tracing::error!(?err, "validation error");
+                        res.send(Err(CommitmentRequestError::Custom(err.to_string()))).err();
                     }
                 };
             },
@@ -153,7 +165,7 @@ async fn main() {
                     Err(err) => tracing::error!(err = ?err, "Error sending constraints")
                 };
 
-                if let Err(e) = fallback_builder.build_fallback_payload(&block).await {
+                if let Err(e) = fallback_builder.build_fallback_payload(&block, slot).await {
                     tracing::error!(err = ?e, "Failed in building fallback payload at slot {slot}");
                 };
 
@@ -176,11 +188,11 @@ async fn main() {
             // Some(Ok(msg)) = read.next() => {
             //     if let tokio_tungstenite::tungstenite::protocol::Message::Text(text) = msg {
             //         let merged_constraints: Vec<SignedConstraints> = serde_json::from_str(text.as_str()).unwrap();
-        
+
             //         tracing::debug!("Received {} merged constraints", merged_constraints.len());
             //         constraint_state.replace_constraints(merged_constraints[0].message.slot, &merged_constraints);
             //     }
-            // }, 
+            // },
             Ok(HeadEvent { slot, .. }) = head_event_listener.next_head() => {
                 tracing::info!(slot, "Got received a new head event");
 
@@ -191,5 +203,4 @@ async fn main() {
             },
         }
     }
-
 }

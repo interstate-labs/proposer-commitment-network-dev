@@ -97,7 +97,7 @@ mod tests {
     //         transactions.len()
     //     );
 
-    //     // Shoudl be 1073741824, 1048576
+    //     // Should be 1073741824, 1048576
     //     let transactions_list =
     //         transactions_to_ssz_list::<1073741824, 1048576>(transactions.clone());
 
@@ -132,7 +132,7 @@ mod tests {
         let (root, transactions) = extract_transactions();
         println!("Transactions root: {:?}, num transactions: {}", root, transactions.len());
 
-        // Shoudl be 1073741824, 1048576
+        // Should be 1073741824, 1048576
         let transactions_list =
             transactions_to_ssz_list::<1073741824, 1048576>(transactions.clone());
 
@@ -205,8 +205,8 @@ mod tests {
         );
     }
 
-    fn path_from_indeces(indeces: &[usize]) -> Vec<PathElement> {
-        indeces.iter().map(|i| PathElement::from(*i)).collect::<Vec<_>>()
+    fn path_from_indeces(indices: &[usize]) -> Vec<PathElement> {
+        indices.iter().map(|i| PathElement::from(*i)).collect::<Vec<_>>()
     }
 
     fn transactions_to_ssz_list<const B: usize, const N: usize>(
