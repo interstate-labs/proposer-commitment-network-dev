@@ -48,7 +48,7 @@ where P: PayloadFetcher + Send + Sync + 'static,
     .route(GET_PAYLOAD_PATH, post(ConstraintsAPIProxyServer::get_payload))
     .with_state(proxy_server);
 
-    let addr: SocketAddr = SocketAddr::from(([0,0,0,0], config.builder_port));
+    let addr: SocketAddr = SocketAddr::from(([127,0,0,1], config.builder_port));
 
     //TODO: replace a listening port as a builder
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();

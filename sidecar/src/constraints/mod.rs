@@ -250,6 +250,15 @@ impl Constraint {
         }
     }
 
+    pub fn validate(&self) -> bool {
+        let recovered = self.tx.recover_signer();
+
+        match (self.sender, recovered) {
+            (Some(sender), Some(recovered)) if sender == recovered => true,
+            _ => false,
+        }
+    }
+
 }
 
 #[derive(Debug, Clone)]
