@@ -157,6 +157,15 @@ async fn handle_local_payload_request(
     }
 }
 
+async fn handle_head_event(slot: u64, constraint_state: Arc<Mutex<ConstraintState>>) {
+    tracing::info!(slot, "Got received a new head event");
+
+    // We use None to signal that we want to fetch the latest EL head
+    if let Err(e) = constraint_state.lock().await.update_head(slot).await {
+        tracing::error!(err = ?e, "Occurred errors in updating the constraint state head");
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let subscriber = Subscriber::builder()
@@ -251,12 +260,9 @@ async fn main() {
             //     }
             // },
             Ok(HeadEvent { slot, .. }) = head_event_listener.next_head() => {
-                tracing::info!(slot, "Got received a new head event");
-
-                // We use None to signal that we want to fetch the latest EL head
-                if let Err(e) = constraint_state.lock().await.update_head(slot).await {
-                    tracing::error!(err = ?e, "Occurred errors in updating the constraint state head");
-                }
+                tokio::spawn(
+                    handle_head_event(slot, constraint_state.clone())
+                );
             },
         }
     }
