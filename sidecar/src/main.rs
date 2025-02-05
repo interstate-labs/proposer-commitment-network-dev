@@ -5,6 +5,9 @@ use metrics::{run_metrics_server, ApiMetrics};
 use state::{ConstraintState, HeadEventListener};
 use tokio::sync::mpsc;
 use tracing_subscriber::fmt::Subscriber;
+use crate::commitment::request::{PreconfRequest, PreconfResult};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use env_file_reader::read_file;
 use tokio::sync::oneshot::Sender;
@@ -15,6 +18,8 @@ use constraints::{
     FetchPayloadRequest, SignedConstraints, TransactionExt,
 };
 use keystores::Keystores;
+use constraints::CommitBoostApi;
+use constraints::builder::PayloadAndBid;
 
 mod commitment;
 mod config;
@@ -33,11 +38,10 @@ pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_"
 
 
 async fn handle_preconfirmation_request(
-    req: CommitmentRequestEvent,
-    res: mpsc::Sender<Result<serde_json::Value, CommitmentRequestError>>,
+    req: PreconfRequest,
+    res: Sender<PreconfResult>,
     keystores: &Keystores,
     constraint_state: &mut ConstraintState,
-    commit_boost_api: &impl CommitBoostApi,
 ) {
     tracing::info!("Received preconfirmation request");
     ApiMetrics::increment_received_commitments_count();
@@ -100,7 +104,7 @@ async fn handle_commitment_deadline(
 
     let Some(block) = constraint_state.remove_constraints_at_slot(slot) else {
         tracing::debug!("Couldn't find a block at slot {slot}");
-        continue;
+        return;
     };
     tracing::debug!("removed constraints at slot {slot}");
 
@@ -203,7 +207,7 @@ async fn main() {
         tokio::select! {
             Some( CommitmentRequestEvent{req, res} ) = receiver.recv() => {
                 tokio::spawn(async move {
-                    handle_preconfirmation_request(req, res, &keystores, &mut constraint_state, &commit_boost_api);
+                    handle_preconfirmation_request(req, res, &keystores, &mut constraint_state);
                 });
             },
             Some(slot) = constraint_state.commitment_deadline.wait() => {
