@@ -46,7 +46,7 @@ pub struct Config {
     pub jwt_hex: String,
     /// The fee recipient address for fallback blocks
     pub fee_recipient: Address,
-    /// Local bulider bls private key for signing fallback payloads.
+    /// Local builder bls private key for signing fallback payloads.
     pub builder_bls_private_key: BLSSecretKey,
     /// The path to the ERC-2335 keystore secret passwords.
     pub keystore_secrets_path: PathBuf,

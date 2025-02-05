@@ -35,27 +35,33 @@ use ethereum_consensus::{
     phase0::mainnet::SLOTS_PER_EPOCH,
 };
 
+use tokio::time::error::Elapsed;
+use crate::{constraints::{SignedConstraints, TransactionExt}, metrics::ApiMetrics};
+
 use crate::{commitment::{inclusion::InclusionRequest, request::PreconfRequest}, utils::transactions::FullTransaction};
 use crate::config::ValidatorIndexes;
-use crate::{
-    constraints::{SignedConstraints, TransactionExt},
-    metrics::ApiMetrics,
-};
+use crate::config::ChainConfig;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
-    #[error("invalid slot: {0}")]
-    InvalidSlot(u64),
-    #[error("deadline expired")]
-    DeadlineExpired,
-    #[error("no validator in slot")]
-    NoValidatorInSlot,
-    #[error("failed in fetching proposer duties from beacon")]
-    FailedFetcingProposerDuties,
-    #[error("Beacon API error: {0}")]
-    BeaconApiError(#[from] beacon_api_client::Error),
-    #[error("{0}")]
-    Custom(String),
+
+  #[error("invalid slot: {0}")]
+  InvalidSlot(u64),
+  #[error("deadline expired")]
+  DeadlineExpired,
+  #[error("no validator in slot")]
+  NoValidatorInSlot,
+  #[error("failed in fetching proposer duties from beacon")]
+  FailedFetcingProposerDuties,
+  #[error("Beacon API error: {0}")]
+  BeaconApiError(#[from] beacon_api_client::Error),
+  #[error("{0}")]
+  Custom(String),
+  #[error("Maximum retries exceeded for get_beacon_header")]
+  MaxRetriesExceeded,
+  #[error("Timeout error: {0}")]
+  Timeout(Elapsed),
+
 }
 
 #[derive(Debug, Default)]
@@ -81,10 +87,16 @@ pub struct ConstraintState {
     pub block_gas_limit: u64,
     pub max_tx_input_bytes: usize,
     pub max_init_code_byte_size: usize,
-
+    pub config: ChainConfig,
     pub beacon_client: Client,
     pub execution: ExecutionState<ClientState>,
 }
+
+use tokio::time::timeout;
+
+const TIMEOUT_SECS: u64 = 10;
+const MAX_RETRIES: u8 = 5;
+const RETRY_BACKOFF_MILLIS: u64 = 100;
 
 impl ConstraintState {
     pub fn new(
@@ -110,6 +122,7 @@ impl ConstraintState {
             block_gas_limit: 30_000_000,
             max_tx_input_bytes: 4 * 32 * 1024,
             max_init_code_byte_size: 2 * 24576,
+            config: Default::default(),
         }
     }
 
@@ -154,6 +167,15 @@ impl ConstraintState {
         &mut self,
         request: &PreconfRequest,
     ) -> Result<ECBlsPublicKey, StateError> {
+        // Check if the chain is eth mainnet
+        if request.chain_id != self.config.id {
+            return Err(StateError::Custom(format!(
+                "Invalid chain ID: expected {}, got {:?}",
+                self.config.id,
+                request.chain_id
+            )));
+        }
+
         // Check if the slot is in the current epoch
         if request.slot < self.current_epoch.start_slot
             || request.slot >= self.current_epoch.start_slot + SLOTS_PER_EPOCH
@@ -377,56 +399,96 @@ impl ConstraintState {
         }
     }
 
-    fn find_validator_pubkey_for_slot(&self, slot: u64) -> Result<ECBlsPublicKey, StateError> {
-        self.current_epoch
-            .proposer_duties
-            .iter()
-            .find(|&duty| duty.slot == slot)
-            .map(|duty| duty.public_key.clone())
-            .ok_or(StateError::NoValidatorInSlot)
-    }
+  fn find_validator_pubkey_for_slot(&self, slot: u64) -> Result<ECBlsPublicKey, StateError> {
+    self.current_epoch
+        .proposer_duties
+        .iter()
+        .find(|&duty| 
+            duty.slot == slot
+        )
+        .map(|duty| duty.public_key.clone())
+        .ok_or(StateError::NoValidatorInSlot)
+  }
 
-    async fn fetch_proposer_duties(&mut self, epoch: u64) -> Result<(), StateError> {
-        match self
-            .beacon_client
-            .get_proposer_duties(epoch)
-            .await
-            .map_err(|_| StateError::FailedFetcingProposerDuties)
-        {
-            Ok(duties) => self.current_epoch.proposer_duties = duties.1,
-            Err(err) => return Err(err),
-        };
-        Ok(())
-    }
+  async fn get_beacon_header_with_retry(&self, head: u64) -> Result<BeaconBlockHeader, StateError> {
+    let mut retries_remaining = MAX_RETRIES;
+    let mut backoff_millis = RETRY_BACKOFF_MILLIS;
 
-    pub async fn update_head(&mut self, head: u64) -> Result<(), StateError> {
-        self.commitment_deadline = CommitmentDeadline::new(head + 1, self.deadline_duration);
+    loop {
+        let result = timeout(
+            Duration::from_secs(TIMEOUT_SECS),
+            self.beacon_client.get_beacon_header(BlockId::Slot(head)),
+        )
+        .await
+        .map_err(StateError::Timeout)?;
 
-        let update = self
-            .beacon_client
-            .get_beacon_header(BlockId::Slot(head))
-            .await?;
-
-        self.header = update.header.message;
-
-        self.latest_slot_timestamp = Instant::now();
-        self.latest_slot = head;
-
-        let slot = self.header.slot;
-        ApiMetrics::set_latest_head(slot as u32);
-        let epoch = slot / SLOTS_PER_EPOCH;
-
-        self.blocks.remove(&slot);
-
-        if epoch != self.current_epoch.value {
-            self.current_epoch.value = epoch;
-            self.current_epoch.start_slot = epoch * SLOTS_PER_EPOCH;
-
-            self.fetch_proposer_duties(epoch).await?;
+        if let Ok(update) = result {
+            return Ok(update.header.message);
         }
 
-        Ok(())
+        if retries_remaining == 0 {
+            return Err(StateError::MaxRetriesExceeded);
+        }
+
+        retries_remaining -= 1;
+        tokio::time::sleep(Duration::from_millis(backoff_millis)).await;
+        backoff_millis *= 2;
     }
+}
+
+  pub async fn update_head(&mut self, head: u64) -> Result<(), StateError> {
+    self.commitment_deadline =
+        CommitmentDeadline::new(head + 1, self.deadline_duration);
+
+    self.header = self.get_beacon_header_with_retry(head).await?;
+
+    self.latest_slot_timestamp = Instant::now();
+    self.latest_slot = head;
+
+    let slot = self.header.slot;
+    ApiMetrics::set_latest_head(slot as u32);
+    let epoch = slot / SLOTS_PER_EPOCH;
+
+    self.blocks.remove(&slot);
+
+    if epoch != self.current_epoch.value {
+        self.current_epoch.value = epoch;
+        self.current_epoch.start_slot = epoch * SLOTS_PER_EPOCH;
+
+        self.fetch_proposer_duties(epoch).await?;
+
+    }
+
+    Ok(())
+  }
+
+  async fn fetch_proposer_duties(&mut self, epoch: u64) -> Result<(), StateError> {
+      // Retry settings
+      let retry_delay = Duration::from_secs(2);
+      let max_retries = 5;
+
+      let mut retries = 0;
+
+      loop {
+          match self
+              .beacon_client
+              .get_proposer_duties(epoch)
+              .await
+              .map_err(|_| StateError::FailedFetcingProposerDuties)
+          {
+              Ok(duties) => {
+                  self.current_epoch.proposer_duties = duties.1;
+                  break;
+              }
+              Err(_) if retries < max_retries => {
+                  retries += 1;
+                  tokio::time::sleep(retry_delay).await;
+              }
+              Err(err) => return Err(err),
+          };
+      }
+      Ok(())
+  }
 }
 
 #[derive(Debug, Default, Clone)]

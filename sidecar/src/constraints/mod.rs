@@ -7,6 +7,7 @@ use alloy::{
     signers::k256::sha2::{Digest, Sha256},
     consensus::BlobTransactionSidecar,
 };
+use tokio::time::{timeout, Duration};
 use builder::{GetHeaderParams, GetPayloadResponse, SignedBuilderBid};
 
 use reth_primitives::{ PooledTransactionsElement, TxType};
@@ -374,12 +375,37 @@ impl CommitBoostApi {
     }
 
 
-    // Constraints API
     pub async fn send_constraints(
         &self,
         constraints: &Vec<SignedConstraints>,
     ) -> Result<(), CommitBoostError> {
+        // Configure retry settings
+        let max_retries = 5;
+        let retry_delay = Duration::from_secs(2);
+        let timeout_duration = Duration::from_secs(10);
 
+        let mut retries = 0;
+        loop {
+            let res = timeout(
+                timeout_duration,
+                self.send_constraints_inner(constraints),
+            ).await;
+
+            match res {
+                Ok(ok) => return ok,
+                Err(err) if retries < max_retries => {
+                    retries += 1;
+                    tokio::time::sleep(retry_delay).await;
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+    }
+
+    async fn send_constraints_inner(
+        &self,
+        constraints: &Vec<SignedConstraints>,
+    ) -> Result<(), CommitBoostError> {
         let response = self
             .client
             .post(self.url.join(CONSTRAINTS_PATH).unwrap())
@@ -387,15 +413,12 @@ impl CommitBoostApi {
             .body(serde_json::to_vec(&constraints)?)
             .send()
             .await?;
-
-        // let response_text = response.clone().text().await?;
-        // tracing::info!("response status: {}", response.status());
-
+    
         if response.status() != StatusCode::OK {
             let error = response.json::<ErrorResponse>().await?;
             return Err(CommitBoostError::FailedSubmittingConstraints(error));
         }
-
+    
         Ok(())
     }
 

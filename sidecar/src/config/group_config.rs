@@ -10,14 +10,16 @@ pub const DEFAULT_COMMITMENT_DEADLINE_MILLIS: u64 = 8_000;
 pub const HOLEKSY_CHAIN_ID:u64 = 17000;
 pub const KURTOSIS_CHAIN_ID:u64 = 3151908;
 
-/// Builder domain for signing messages on Holesky and Kurtosis.
+/// Builder domain for signing messages on Holesky, Kurtosis and Mainnet.
+/// ToDo: Add Mainnet domain
+const BUILDER_DOMAIN_MAINNET: [u8; 32] = b256!("00000001f5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a9").0;
 const BUILDER_DOMAIN_HOLESKY: [u8; 32] = b256!("000000015b83a23759c560b2d0c64576e1dcfc34ea94c4988f3e0d9f77f05387").0;
 const BUILDER_DOMAIN_KURTOSIS: [u8; 32] = b256!("000000010b41be4cdb34d183dddca5398337626dcdcfaf1720c1202d3b95f84e").0;
 
 /// The domain mask for signing commit-boost messages.
 pub const COMMIT_BOOST_DOMAIN_MASK: [u8; 4] = [109, 109, 111, 67];
 
-/// Chain configration
+/// Chain configuration
 #[derive(Debug, Clone)]
 pub struct ChainConfig {
     /// chain name
@@ -46,6 +48,7 @@ impl Default for ChainConfig {
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub enum Chain {
+    Mainnet,
     Holesky,
     Kurtosis,
 }
@@ -54,6 +57,7 @@ impl Chain {
     // get chain name as str
     pub fn get_name(&self) -> &'static str {
         match self {
+            Chain::Mainnet => "mainnet",
             Chain::Holesky => "mainnet",
             Chain::Kurtosis => "kurtosis"
         }
@@ -62,6 +66,7 @@ impl Chain {
     // get fork version of chain 
     pub fn get_fork_version(&self) -> [u8; 4] {
         match self {
+            Chain::Mainnet => [5, 0, 0, 0],  // Dencun fork version
             Chain::Holesky => [1, 1, 112, 0],
             Chain::Kurtosis => [16, 0, 0, 56],
         }
@@ -85,6 +90,7 @@ impl ChainConfig {
     /// Get the domain for signing messages on the given chain.
     pub fn builder_domain(&self) -> [u8; 32] {
         match self.chain {
+            Chain::Mainnet => BUILDER_DOMAIN_MAINNET,
             Chain::Holesky => BUILDER_DOMAIN_HOLESKY,
             Chain::Kurtosis => BUILDER_DOMAIN_KURTOSIS,
         }
