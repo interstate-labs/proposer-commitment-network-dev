@@ -17,7 +17,7 @@ const BUILDER_DOMAIN_KURTOSIS: [u8; 32] = b256!("000000010b41be4cdb34d183dddca53
 /// The domain mask for signing commit-boost messages.
 pub const COMMIT_BOOST_DOMAIN_MASK: [u8; 4] = [109, 109, 111, 67];
 
-/// Chain configration
+/// Chain configuration
 #[derive(Debug, Clone)]
 pub struct ChainConfig {
     /// chain name

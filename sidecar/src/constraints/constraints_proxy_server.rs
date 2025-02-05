@@ -179,9 +179,9 @@ impl<P> ConstraintsAPIProxyServer<P> where P: PayloadFetcher + Send + Sync, {
     };
   }
 
-  async fn register_validators( State(server):State<Arc<ConstraintsAPIProxyServer<P>>>, Json(registors):Json<Vec<SignedValidatorRegistration>>) -> Result<StatusCode, CommitBoostError> {
+  async fn register_validators( State(server):State<Arc<ConstraintsAPIProxyServer<P>>>, Json(registers):Json<Vec<SignedValidatorRegistration>>) -> Result<StatusCode, CommitBoostError> {
     tracing::debug!("handling REGISTER_VALIDATORS_REQUEST");
-    server.proxier.register_validators(registors).await.map(|_| StatusCode::OK)
+    server.proxier.register_validators(registers).await.map(|_| StatusCode::OK)
   }
 
 }

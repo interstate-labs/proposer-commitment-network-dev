@@ -135,7 +135,7 @@ async fn main() {
                     },
                     Err(err) => {
                         ApiMetrics::increment_validation_errors_count("validation error".to_string());
-                        tracing::error!(?err, "No available vaildators");
+                        tracing::error!(?err, "No available validators");
                     }
                 };
             },
