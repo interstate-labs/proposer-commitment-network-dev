@@ -1,25 +1,44 @@
+pub mod execution;
+pub mod account_state;
+pub mod fetcher;
+pub mod execution_client;
+pub mod pricing;
+pub mod signature;
+
 use std::{
-    collections::HashMap,
-    num::NonZero,
-    pin::Pin,
-    task::{Context, Poll},
-    time::{Duration, Instant},
+    collections::HashMap, mem, num::NonZero, pin::Pin, task::{Context, Poll}, time::{Duration, Instant}
 };
 
 use alloy::rpc::types::beacon::events::HeadEvent;
 use beacon_api_client::Topic;
 use beacon_api_client::{mainnet::Client, BlockId, ProposerDuty};
+use execution::ExecutionState;
+use fetcher::ClientState;
 use futures::StreamExt;
 use futures::{future::poll_fn, Future, FutureExt};
 use reth_primitives::{PooledTransactionsElement, TransactionSigned};
+use reth_primitives_v115::PooledTransaction;
+use signature::AlloySignatureWrapper;
 use tokio::time::Sleep;
 use tokio::{sync::broadcast, task::AbortHandle};
+use reth_primitives::PooledTransactionsElement::{
+    BlobTransaction, Eip1559, Eip2930, Eip7702, Legacy,
+};
+use alloy_v092::consensus::{Signed, TxEip1559, TxEip2930, TxEip4844, TxEip7702, TxLegacy};
+use ethereum_consensus::{
+    crypto::PublicKey as ECBlsPublicKey,
+    crypto::{KzgCommitment, KzgProof},
+    deneb::{
+        mainnet::{Blob, BlobsBundle},
+        BeaconBlockHeader,
+    },
+    phase0::mainnet::SLOTS_PER_EPOCH,
+};
 
 use tokio::time::error::Elapsed;
-use ethereum_consensus::{crypto::PublicKey as ECBlsPublicKey, deneb:: { BeaconBlockHeader, mainnet::{Blob, BlobsBundle} }, crypto::{KzgCommitment, KzgProof}, phase0::mainnet::SLOTS_PER_EPOCH};
 use crate::{constraints::{SignedConstraints, TransactionExt}, metrics::ApiMetrics};
 
-use crate::commitment::request::PreconfRequest;
+use crate::{commitment::{inclusion::InclusionRequest, request::PreconfRequest}, utils::transactions::FullTransaction};
 use crate::config::ValidatorIndexes;
 use crate::config::ChainConfig;
 
@@ -70,6 +89,7 @@ pub struct ConstraintState {
     pub max_init_code_byte_size: usize,
     pub config: ChainConfig,
     pub beacon_client: Client,
+    pub execution: ExecutionState<ClientState>,
 }
 
 use tokio::time::timeout;
@@ -83,6 +103,7 @@ impl ConstraintState {
         beacon_client: Client,
         validator_indexes: ValidatorIndexes,
         commitment_deadline_duration: Duration,
+        execution: ExecutionState<ClientState>
     ) -> Self {
         Self {
             blocks: HashMap::new(),
@@ -93,6 +114,7 @@ impl ConstraintState {
             current_epoch: Default::default(),
             validator_indexes,
             beacon_client,
+            execution,
             header: BeaconBlockHeader::default(),
             max_commitments_in_block: 128,
             max_commitment_gas: NonZero::new(10_000_000).unwrap(),
@@ -141,8 +163,8 @@ impl ConstraintState {
         self.blocks.remove(&slot)
     }
 
-    pub fn validate_preconf_request(
-        &self,
+    pub async fn validate_preconf_request(
+        &mut self,
         request: &PreconfRequest,
     ) -> Result<ECBlsPublicKey, StateError> {
         // Check if the chain is eth mainnet
@@ -234,7 +256,147 @@ impl ConstraintState {
             ));
         }
 
-        Ok(public_key)
+        // // Execution Layer Validation
+        let mut txs: Vec<FullTransaction> = vec![];
+        for tx in request.txs.clone() {
+            let pooled_tx = tx.tx;
+            let full_tx: FullTransaction;
+            match pooled_tx {
+                Legacy {
+                    transaction,
+                    signature,
+                    hash,
+                } => {
+                    full_tx = FullTransaction::from(PooledTransaction::Legacy(Signed::new_unchecked(
+                        TxLegacy {
+                            chain_id: transaction.chain_id,
+                            nonce: transaction.nonce,
+                            gas_price: transaction.gas_price,
+                            gas_limit: transaction.gas_limit,
+                            to: transaction.to,
+                            value: transaction.value,
+                            input: transaction.input,
+                        },
+                        signature,
+                        hash,
+                    )))
+                }
+                Eip2930 {
+                    transaction,
+                    signature,
+                    hash,
+                } => {
+                    full_tx = FullTransaction::from(PooledTransaction::Eip2930(Signed::new_unchecked(
+                        TxEip2930 {
+                            chain_id: transaction.chain_id,
+                            nonce: transaction.nonce,
+                            gas_price: transaction.gas_price,
+                            gas_limit: transaction.gas_limit,
+                            to: transaction.to,
+                            value: transaction.value,
+                            input: transaction.input,
+                            access_list: transaction.access_list,
+                        },
+                        signature,
+                        hash,
+                    )))
+                }
+                Eip1559 {
+                    transaction,
+                    signature,
+                    hash,
+                } => {
+                    full_tx = FullTransaction::from(PooledTransaction::Eip1559(Signed::new_unchecked(
+                        TxEip1559 {
+                            chain_id: transaction.chain_id,
+                            nonce: transaction.nonce,
+                            gas_limit: transaction.gas_limit,
+                            to: transaction.to,
+                            value: transaction.value,
+                            input: transaction.input,
+                            access_list: transaction.access_list,
+                            max_fee_per_gas: transaction.max_fee_per_gas,
+                            max_priority_fee_per_gas: transaction.max_priority_fee_per_gas,
+                        },
+                        signature,
+                        hash,
+                    )))
+                }
+                Eip7702 {
+                    transaction,
+                    signature,
+                    hash,
+                } => {
+                    let authorization_list = unsafe { mem::transmute(transaction.authorization_list) };
+                    full_tx = FullTransaction::from(PooledTransaction::Eip7702(Signed::new_unchecked(
+                        TxEip7702 {
+                            chain_id: transaction.chain_id,
+                            nonce: transaction.nonce,
+                            gas_limit: transaction.gas_limit,
+                            to: transaction.to,
+                            value: transaction.value,
+                            input: transaction.input,
+                            access_list: transaction.access_list,
+                            max_fee_per_gas: transaction.max_fee_per_gas,
+                            max_priority_fee_per_gas: transaction.max_priority_fee_per_gas,
+                            authorization_list: authorization_list,
+                        },
+                        signature,
+                        hash,
+                    )))
+                }
+                BlobTransaction(blob_transaction) => {
+                    full_tx = FullTransaction::from(PooledTransaction::Eip4844(Signed::new_unchecked(
+                        alloy_v092::consensus::TxEip4844WithSidecar {
+                            tx: TxEip4844 {
+                                chain_id: blob_transaction.transaction.tx.chain_id,
+                                nonce: blob_transaction.transaction.tx.nonce,
+                                gas_limit: blob_transaction.transaction.tx.gas_limit,
+                                max_fee_per_gas: blob_transaction.transaction.tx.max_fee_per_gas,
+                                max_priority_fee_per_gas: blob_transaction
+                                    .transaction
+                                    .tx
+                                    .max_priority_fee_per_gas,
+                                to: blob_transaction.transaction.tx.to,
+                                value: blob_transaction.transaction.tx.value,
+                                access_list: blob_transaction.transaction.tx.access_list,
+                                blob_versioned_hashes: blob_transaction
+                                    .transaction
+                                    .tx
+                                    .blob_versioned_hashes,
+                                max_fee_per_blob_gas: blob_transaction.transaction.tx.max_fee_per_blob_gas,
+                                input: blob_transaction.transaction.tx.input,
+                            },
+                            sidecar: alloy_v092::consensus::BlobTransactionSidecar {
+                                blobs: blob_transaction.transaction.sidecar.blobs,
+                                commitments: blob_transaction.transaction.sidecar.commitments,
+                                proofs: blob_transaction.transaction.sidecar.proofs,
+                            },
+                        },
+                        blob_transaction.signature,
+                        blob_transaction.hash,
+                    )))
+                }
+            }
+            txs.push(full_tx);
+        }
+
+        let mut ir: InclusionRequest = InclusionRequest {
+            slot: request.slot.clone(),
+            txs,
+            signature: Some(AlloySignatureWrapper::try_from(request.signature.as_bytes().as_ref()).unwrap()),
+            signer: Some(request.sender),
+        };
+        
+        let result = self.execution.verify_el_tx(&mut ir).await;
+        match result {
+            Ok(_) => {
+                Ok(public_key)
+            }
+            Err(err) => {
+                return Err(StateError::Custom("Execution Layer Validation Failed!".to_string()))
+            }
+        }
     }
 
   fn find_validator_pubkey_for_slot(&self, slot: u64) -> Result<ECBlsPublicKey, StateError> {

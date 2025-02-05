@@ -2,14 +2,14 @@ use alloy::{primitives::FixedBytes, rpc::types::beacon::events::HeadEvent};
 pub use beacon_api_client::mainnet::Client;
 use commitment::request::{CommitmentRequestError, CommitmentRequestEvent};
 use metrics::{run_metrics_server, ApiMetrics};
-use state::{ConstraintState, HeadEventListener};
+use state::{execution::ExecutionState, fetcher::ClientState, ConstraintState, HeadEventListener};
 use tokio::sync::mpsc;
 use tracing_subscriber::fmt::Subscriber;
 
 use env_file_reader::read_file;
 
 use commitment::{run_commitment_rpc_server, PreconfResponse};
-use config::Config;
+use config::{limits::{LimitOptions, DEFAULT_GAS_LIMIT}, Config};
 use constraints::{
     run_constraints_proxy_server, ConstraintsMessage, FallbackBuilder, FallbackPayloadFetcher,
     FetchPayloadRequest, SignedConstraints, TransactionExt,
@@ -27,6 +27,8 @@ mod onchain;
 mod state;
 mod test_utils;
 mod utils;
+mod builder;
+mod crypto;
 
 pub type BLSBytes = FixedBytes<96>;
 pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
@@ -66,11 +68,13 @@ async fn main() {
 
     let beacon_client = Client::new(config.beacon_api_url.clone());
 
+    let client_state = ClientState::new(config.execution_api_url.clone());
     // let mut constraint_state = Arc::new(RwLock::new(ConstraintState::new( beacon_client.clone(), config.validator_indexes.clone(), config.chain.get_commitment_deadline_duration()))) ;
     let mut constraint_state = ConstraintState::new(
         beacon_client.clone(),
         config.validator_indexes.clone(),
         config.chain.get_commitment_deadline_duration(),
+        ExecutionState::new(client_state, LimitOptions::default(), DEFAULT_GAS_LIMIT).await.expect("Failed to create Execution State")
     );
 
     let mut head_event_listener = HeadEventListener::run(beacon_client);
@@ -104,7 +108,7 @@ async fn main() {
                 let slot = req.slot;
                 let pubkeys = keystores.get_pubkeys();
 
-                match constraint_state.validate_preconf_request(&req) {
+                match constraint_state.validate_preconf_request(&req).await {
                     Ok(pubkey) => {
 
                         if !pubkeys.contains(&pubkey) {
@@ -199,6 +203,11 @@ async fn main() {
                 // We use None to signal that we want to fetch the latest EL head
                 if let Err(e) = constraint_state.update_head(slot).await {
                     tracing::error!(err = ?e, "Occurred errors in updating the constraint state head");
+                }
+
+                // We use None to signal that we want to fetch the latest EL head
+                if let Err(e) = constraint_state.execution.update_head(None, slot).await {
+                    tracing::error!(err = ?e, "Failed to update execution state head");
                 }
             },
         }
