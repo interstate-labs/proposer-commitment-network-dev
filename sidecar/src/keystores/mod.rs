@@ -41,11 +41,11 @@ impl Keystores {
   pub fn new(pubkeys_root_path: &Path, secrets_path: &Path, chain: &ChainConfig) -> Self {
     let mut keystore_paths = Vec::new();
 
-    for dir_entry in read_dir(&pubkeys_root_path.to_path_buf()).unwrap() {
-        let path = read_path(dir_entry).unwrap();
+    for dir_entry in read_dir(&pubkeys_root_path.to_path_buf()).expect(&format!("invalid pubkeys root path {:#?}", pubkeys_root_path)) {
+        let path = read_path(dir_entry).expect(&format!("invalid root directory entry"));
         if path.is_dir() {
-            for dir_entry in read_dir(&path).unwrap() {
-                let path = read_path(dir_entry).unwrap();
+            for dir_entry in read_dir(&path).expect(&format!("invalid directory path {:#?}", path)) {
+                let path = read_path(dir_entry).expect(&format!("invalid directory entry"));
                 if path.is_file() && path.extension() == Some(&OsString::from("json")) {
                   keystore_paths.push(path);
                 }
@@ -56,14 +56,14 @@ impl Keystores {
     let mut keypairs = Vec::with_capacity(keystore_paths.len());
 
     for path in keystore_paths {
-      let keystore = Keystore::from_json_file(path.clone()).unwrap();
+      let keystore = Keystore::from_json_file(path.clone()).expect(&format!("invalid public key path {:#?}", path));
 
       let pubkey = format!("0x{}", keystore.pubkey());
 
       let mut secret_path = secrets_path.to_path_buf();
       secret_path.push(pubkey);
 
-      let password = fs::read_to_string(secret_path).unwrap();
+      let password = fs::read_to_string(secret_path.clone()).expect(&format!("invalid secret path {:#?}", secret_path));
 
       let keypair = keystore.decrypt_keypair(password.as_bytes()).unwrap();
 

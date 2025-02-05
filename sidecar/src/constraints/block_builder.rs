@@ -53,6 +53,10 @@ use reqwest::{Client, Url};
 use crate::config::Config;
 
 use super::builder::BuilderError;
+use std::time::Duration;
+use tokio::time::timeout;
+
+const GET_BLOCK_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Extra-data payload field used for locally built blocks, decoded in UTF-8.
 ///
@@ -89,9 +93,17 @@ impl BlockBuilder {
     }
 }
 
+
   pub async fn build_sealed_block( &self, txs: &[TransactionSigned]) -> Result<SealedBlock, BuilderError>  {
-    let latest_block = self.el_rpc_client.get_block(None, true).await?;
+ let latest_block = timeout(GET_BLOCK_TIMEOUT, self.el_rpc_client.get_block(None, true))
+        .await
+        .map_err(|_| BuilderError::Timeout("Getting latest block timed out".into()))?
+        .map_err(BuilderError::RpcError)?;
+
     tracing::debug!("got latest block");
+    
+    let first_block = self.el_rpc_client.get_block(Some(0), true).await?;
+    let genesis_time = first_block.header.timestamp;
 
     let withdrawals = self.beacon_rpc_client.get_expected_withdrawals(StateId::Head, None).await?.into_iter().map(convert_withdrawal_from_consensus_to_alloy).collect::<Vec<_>>();
     tracing::debug!("got withdrawals");
@@ -170,7 +182,7 @@ impl BlockBuilder {
         let mut i = 0;
 
         loop {
-            let header = build_header_with_hints_and_context(&latest_block, &hints, &ctx);
+            let header = build_header_with_hints_and_context(&latest_block, genesis_time, slot, &hints, &ctx);
 
             let sealed_hash = header.hash_slow();
             let sealed_header = SealedHeader::new(header, sealed_hash);
@@ -534,6 +546,8 @@ pub(crate) fn parse_geth_response(error: &str) -> Option<String> {
 /// Build a header with the given hints and context values.
 fn build_header_with_hints_and_context(
   latest_block: &Block,
+  genesis_time: u64,
+  slot: u64,
   hints: &Hints,
   context: &Context,
 ) -> Header {
@@ -556,7 +570,7 @@ fn build_header_with_hints_and_context(
       number: latest_block.header.number + 1,
       gas_limit: latest_block.header.gas_limit as u64,
       gas_used,
-      timestamp: latest_block.header.timestamp + context.slot_time_in_seconds,
+      timestamp: genesis_time + slot * context.slot_time_in_seconds,
       mix_hash: context.prev_randao,
       nonce: B64::ZERO,
       base_fee_per_gas: Some(context.base_fee),
