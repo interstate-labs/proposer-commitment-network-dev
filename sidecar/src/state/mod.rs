@@ -13,6 +13,7 @@ use futures::StreamExt;
 use futures::{future::poll_fn, Future, FutureExt};
 use reth_primitives::{PooledTransactionsElement, TransactionSigned};
 use tokio::time::Sleep;
+use tokio::{sync::broadcast, task::AbortHandle};
 
 use tokio::time::error::Elapsed;
 use ethereum_consensus::{crypto::PublicKey as ECBlsPublicKey, deneb:: { BeaconBlockHeader, mainnet::{Blob, BlobsBundle} }, crypto::{KzgCommitment, KzgProof}, phase0::mainnet::SLOTS_PER_EPOCH};
@@ -20,10 +21,6 @@ use crate::{constraints::{SignedConstraints, TransactionExt}, metrics::ApiMetric
 
 use crate::commitment::request::PreconfRequest;
 use crate::config::ValidatorIndexes;
-use crate::{
-    constraints::{SignedConstraints, TransactionExt},
-    metrics::ApiMetrics,
-};
 use crate::config::ChainConfig;
 
 #[derive(Debug, thiserror::Error)]
@@ -76,7 +73,6 @@ pub struct ConstraintState {
 }
 
 use tokio::time::timeout;
-use futures::future::{join_all, try_join_all};
 
 const TIMEOUT_SECS: u64 = 10;
 const MAX_RETRIES: u8 = 5;
@@ -241,10 +237,6 @@ impl ConstraintState {
         Ok(public_key)
     }
 
-
-    Ok(public_key)
-  }
-
   fn find_validator_pubkey_for_slot(&self, slot: u64) -> Result<ECBlsPublicKey, StateError> {
     self.current_epoch
         .proposer_duties
@@ -254,14 +246,6 @@ impl ConstraintState {
         )
         .map(|duty| duty.public_key.clone())
         .ok_or(StateError::NoValidatorInSlot)
-  }
-
-  async fn fetch_proposer_duties(&mut self, epoch: u64) -> Result<(), StateError> {
-    match self.beacon_client.get_proposer_duties(epoch).await.map_err(|_| StateError::FailedFetcingProposerDuties){
-      Ok(duties) =>  self.current_epoch.proposer_duties = duties.1,
-      Err(err) => return Err(err)
-    };
-    Ok(())
   }
 
   async fn get_beacon_header_with_retry(&self, head: u64) -> Result<BeaconBlockHeader, StateError> {
@@ -294,8 +278,6 @@ impl ConstraintState {
     self.commitment_deadline =
         CommitmentDeadline::new(head + 1, self.deadline_duration);
 
-
-  
     self.header = self.get_beacon_header_with_retry(head).await?;
 
     self.latest_slot_timestamp = Instant::now();
@@ -315,62 +297,36 @@ impl ConstraintState {
 
     }
 
-    async fn fetch_proposer_duties(&mut self, epoch: u64) -> Result<(), StateError> {
-        // Retry settings
-        let retry_delay = Duration::from_secs(2);
-        let max_retries = 5;
+    Ok(())
+  }
 
-        let mut retries = 0;
+  async fn fetch_proposer_duties(&mut self, epoch: u64) -> Result<(), StateError> {
+      // Retry settings
+      let retry_delay = Duration::from_secs(2);
+      let max_retries = 5;
 
-        loop {
-            match self
-                .beacon_client
-                .get_proposer_duties(epoch)
-                .await
-                .map_err(|_| StateError::FailedFetcingProposerDuties)
-            {
-                Ok(duties) => {
-                    self.current_epoch.proposer_duties = duties.1;
-                    break;
-                }
-                Err(_) if retries < max_retries => {
-                    retries += 1;
-                    tokio::time::sleep(retry_delay).await;
-                }
-                Err(err) => return Err(err),
-            };
-        }
-        Ok(())
-    }
+      let mut retries = 0;
 
-    pub async fn update_head(&mut self, head: u64) -> Result<(), StateError> {
-        self.commitment_deadline = CommitmentDeadline::new(head + 1, self.deadline_duration);
-
-        let update = self
-            .beacon_client
-            .get_beacon_header(BlockId::Slot(head))
-            .await?;
-
-        self.header = update.header.message;
-
-        self.latest_slot_timestamp = Instant::now();
-        self.latest_slot = head;
-
-        let slot = self.header.slot;
-        ApiMetrics::set_latest_head(slot as u32);
-        let epoch = slot / SLOTS_PER_EPOCH;
-
-        self.blocks.remove(&slot);
-
-        if epoch != self.current_epoch.value {
-            self.fetch_proposer_duties(epoch).await?;
-
-            self.current_epoch.value = epoch;
-            self.current_epoch.start_slot = epoch * SLOTS_PER_EPOCH;
-        }
-
-        Ok(())
-    }
+      loop {
+          match self
+              .beacon_client
+              .get_proposer_duties(epoch)
+              .await
+              .map_err(|_| StateError::FailedFetcingProposerDuties)
+          {
+              Ok(duties) => {
+                  self.current_epoch.proposer_duties = duties.1;
+                  break;
+              }
+              Err(_) if retries < max_retries => {
+                  retries += 1;
+                  tokio::time::sleep(retry_delay).await;
+              }
+              Err(err) => return Err(err),
+          };
+      }
+      Ok(())
+  }
 }
 
 #[derive(Debug, Default, Clone)]

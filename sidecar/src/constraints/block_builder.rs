@@ -94,8 +94,8 @@ impl BlockBuilder {
 }
 
 
-  pub async fn build_sealed_block( &self, txs: &[TransactionSigned]) -> Result<SealedBlock, BuilderError>  {
- let latest_block = timeout(GET_BLOCK_TIMEOUT, self.el_rpc_client.get_block(None, true))
+  pub async fn build_sealed_block( &self, txs: &[TransactionSigned], slot: u64) -> Result<SealedBlock, BuilderError>  {
+    let latest_block = timeout(GET_BLOCK_TIMEOUT, self.el_rpc_client.get_block(None, true))
         .await
         .map_err(|_| BuilderError::Timeout("Getting latest block timed out".into()))?
         .map_err(BuilderError::RpcError)?;
@@ -640,12 +640,8 @@ mod tests {
 
         let ecda_signature = signer.clone().sign_hash(&message_digest).await.unwrap();
 
-        let request = PreconfRequest {
-            signature: ecda_signature,
-            txs,
-            sender:addy,
-            slot: 42,
-        };
+        let request = PreconfRequest {signature:ecda_signature,txs,sender:addy,slot:42, chain_id: 171000 };
+        
 
         // println!("preconf request {:#?}", request);
 
