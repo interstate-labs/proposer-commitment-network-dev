@@ -118,7 +118,7 @@ async fn handle_commitment_deadline(
     };
 }
 
-async fn git handle_local_payload_request(
+async fn handle_local_payload_request(
     slot: u64,
     fallback_builder: &mut FallbackBuilder,
     response_tx: Sender<Option<PayloadAndBid>>,
