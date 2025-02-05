@@ -193,8 +193,29 @@ impl ConstraintState {
             .map(|t| t.committed_gas())
             .unwrap_or(0);
 
-        if template_committed_gas + request.gas_limit() > self.max_commitment_gas.into() {
+        // Check total committed gas stays below max_commitment_gas
+        if template_committed_gas + request.gas_limit() >= self.max_commitment_gas.into() {
             return Err(StateError::Custom("Overflow gas limit".to_string()));
+        }
+
+        // Get parent block gas limit by fetching the parent block header
+        let parent_block_id = BlockId::Root(self.header.parent_root);
+        let parent_header = self.beacon_client.get_beacon_header(parent_block_id);
+        let parent_gas_limit = match parent_header.message.execution_payload {
+            Some(payload) => payload.gas_limit,
+            None => return Err(StateError::Custom("Parent block missing execution payload".to_string())),
+        };
+
+        // Calculate allowed gas limit range based on EIP-1559 constraints
+        let min_gas_limit = parent_gas_limit - parent_gas_limit / 1024;
+        let max_gas_limit = parent_gas_limit + parent_gas_limit / 1024;
+
+        // Check request gas limit is within allowed EIP-1559 range 
+        if request.gas_limit() < min_gas_limit || request.gas_limit() > max_gas_limit {
+            return Err(StateError::Custom(format!(
+                "Invalid gas limit. Must be within [{}, {}]", 
+                min_gas_limit, max_gas_limit
+            )));
         }
 
         // Check if the transaction size exceeds the maximum
@@ -210,11 +231,6 @@ impl ConstraintState {
             return Err(StateError::Custom(
                 "Overflow transaction size in code bytes".to_string(),
             ));
-        }
-
-        // Check if the gas limit is higher than the maximum block gas limit
-        if request.gas_limit() > self.block_gas_limit {
-            return Err(StateError::Custom("Overflow gas limit".to_string()));
         }
 
         // Ensure max_priority_fee_per_gas is less than max_fee_per_gas
