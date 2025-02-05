@@ -97,7 +97,7 @@ async fn handle_preconfirmation_request(
 async fn handle_commitment_deadline(
     slot: u64,
     constraint_state: &mut ConstraintState,
-    commit_boost_api: &impl CommitBoostApi,
+    commit_boost_api: &CommitBoostApi,
     fallback_builder: &mut FallbackBuilder
 ) {
     tracing::info!("The commitment deadline is reached in slot {}", slot);
@@ -118,7 +118,7 @@ async fn handle_commitment_deadline(
     };
 }
 
-async fn handle_local_payload_request(
+async fn git handle_local_payload_request(
     slot: u64,
     fallback_builder: &mut FallbackBuilder,
     response_tx: Sender<Option<PayloadAndBid>>,
