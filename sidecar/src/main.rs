@@ -1,25 +1,26 @@
+use crate::commitment::request::{PreconfRequest, PreconfResult};
 use alloy::{primitives::FixedBytes, rpc::types::beacon::events::HeadEvent};
 pub use beacon_api_client::mainnet::Client;
 use commitment::request::{CommitmentRequestError, CommitmentRequestEvent};
 use metrics::{run_metrics_server, ApiMetrics};
 use state::{ConstraintState, HeadEventListener};
-use tokio::sync::mpsc;
-use tracing_subscriber::fmt::Subscriber;
-use crate::commitment::request::{PreconfRequest, PreconfResult};
+use std::borrow::BorrowMut;
 use std::sync::Arc;
+use tokio::sync::mpsc;
 use tokio::sync::Mutex;
+use tracing_subscriber::fmt::Subscriber;
 
-use env_file_reader::read_file;
-use tokio::sync::oneshot::Sender;
 use commitment::{run_commitment_rpc_server, PreconfResponse};
 use config::Config;
+use constraints::builder::PayloadAndBid;
+use constraints::CommitBoostApi;
 use constraints::{
     run_constraints_proxy_server, ConstraintsMessage, FallbackBuilder, FallbackPayloadFetcher,
     FetchPayloadRequest, SignedConstraints, TransactionExt,
 };
+use env_file_reader::read_file;
 use keystores::Keystores;
-use constraints::CommitBoostApi;
-use constraints::builder::PayloadAndBid;
+use tokio::sync::oneshot::Sender;
 
 mod commitment;
 mod config;
@@ -36,13 +37,14 @@ mod utils;
 pub type BLSBytes = FixedBytes<96>;
 pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
-
 async fn handle_preconfirmation_request(
     req: PreconfRequest,
     res: Sender<PreconfResult>,
-    keystores: &Keystores,
-    constraint_state: &mut ConstraintState,
+    keystores: Keystores,
+    constraint_state: Arc<Mutex<ConstraintState>>,
 ) {
+    let mut constraint_state = constraint_state.lock().await;
+
     tracing::info!("Received preconfirmation request");
     ApiMetrics::increment_received_commitments_count();
 
@@ -52,7 +54,10 @@ async fn handle_preconfirmation_request(
     match constraint_state.validate_preconf_request(&req) {
         Ok(pubkey) => {
             if !pubkeys.contains(&pubkey) {
-                tracing::error!("Not available validator in slot {} to sign in sidecar", slot);
+                tracing::error!(
+                    "Not available validator in slot {} to sign in sidecar",
+                    slot
+                );
                 return;
             }
 
@@ -83,23 +88,32 @@ async fn handle_preconfirmation_request(
                 //     Err(err) => tracing::error!(err = ?err, "Error sending constraints to be collected")
                 // };
             }
-            let response = serde_json::to_value(PreconfResponse { ok: true, signed_contraints_list }).map_err(Into::into);
+            let response = serde_json::to_value(PreconfResponse {
+                ok: true,
+                signed_contraints_list,
+            })
+            .map_err(Into::into);
             let _ = res.send(response).ok();
-        },
+        }
         Err(err) => {
             ApiMetrics::increment_validation_errors_count("validation error".to_string());
             tracing::error!(?err, "validation error");
-            res.send(Err(CommitmentRequestError::Custom(err.to_string()))).err();
+            res.send(Err(CommitmentRequestError::Custom(err.to_string())))
+                .err();
         }
     };
 }
 
 async fn handle_commitment_deadline(
     slot: u64,
-    constraint_state: &mut ConstraintState,
-    commit_boost_api: &CommitBoostApi,
-    fallback_builder: &mut FallbackBuilder
+    constraint_state: Arc<Mutex<ConstraintState>>,
+    commit_boost_api: Arc<Mutex<CommitBoostApi>>,
+    fallback_builder: Arc<Mutex<FallbackBuilder>>,
 ) {
+    let mut constraint_state = constraint_state.lock().await;
+    let commit_boost_api = commit_boost_api.lock().await;
+    let mut fallback_builder = fallback_builder.lock().await;
+
     tracing::info!("The commitment deadline is reached in slot {}", slot);
 
     let Some(block) = constraint_state.remove_constraints_at_slot(slot) else {
@@ -108,9 +122,12 @@ async fn handle_commitment_deadline(
     };
     tracing::debug!("removed constraints at slot {slot}");
 
-    match commit_boost_api.send_constraints(&block.signed_constraints_list).await {
+    match commit_boost_api
+        .send_constraints(&block.signed_constraints_list)
+        .await
+    {
         Ok(_) => tracing::info!("Sent constratins successfully."),
-        Err(err) => tracing::error!(err = ?err, "Error sending constraints")
+        Err(err) => tracing::error!(err = ?err, "Error sending constraints"),
     };
 
     if let Err(e) = fallback_builder.build_fallback_payload(&block, slot).await {
@@ -120,9 +137,11 @@ async fn handle_commitment_deadline(
 
 async fn handle_local_payload_request(
     slot: u64,
-    fallback_builder: &mut FallbackBuilder,
+    fallback_builder: Arc<Mutex<FallbackBuilder>>,
     response_tx: Sender<Option<PayloadAndBid>>,
 ) {
+    let mut fallback_builder = fallback_builder.lock().await;
+
     tracing::info!(slot, "Received local payload request");
 
     let Some(payload_and_bid) = fallback_builder.get_cached_payload() else {
@@ -137,7 +156,6 @@ async fn handle_local_payload_request(
         tracing::debug!("Sent payload and bid to response channel");
     }
 }
-
 
 #[tokio::main]
 async fn main() {
@@ -175,7 +193,7 @@ async fn main() {
     let beacon_client = Client::new(config.beacon_api_url.clone());
 
     // let mut constraint_state = Arc::new(RwLock::new(ConstraintState::new( beacon_client.clone(), config.validator_indexes.clone(), config.chain.get_commitment_deadline_duration()))) ;
-    let mut constraint_state = ConstraintState::new(
+    let constraint_state = ConstraintState::new(
         beacon_client.clone(),
         config.validator_indexes.clone(),
         config.chain.get_commitment_deadline_duration(),
@@ -183,7 +201,7 @@ async fn main() {
 
     let mut head_event_listener = HeadEventListener::run(beacon_client);
 
-    let mut fallback_builder = FallbackBuilder::new(&config);
+    let fallback_builder = FallbackBuilder::new(&config);
 
     //  let ws_stream = match connect_async(config.collector_ws.clone()).await {
     //     Ok((stream, response)) => {
@@ -201,22 +219,28 @@ async fn main() {
 
     tracing::debug!("Connected to the server!");
 
+    let constraint_state = Arc::new(Mutex::new(constraint_state));
+    let commit_boost_api = Arc::new(Mutex::new(commit_boost_api));
+    let fallback_builder = Arc::new(Mutex::new(fallback_builder));
+
     // let (mut write, mut read) = ws_stream.split();
     // let constraint_state_store = constraint_state.write();
     loop {
+        let mut constraint_state_inner = constraint_state.lock().await;
+        // this will be unlocked after the second tokio::select slot is finished.
         tokio::select! {
             Some( CommitmentRequestEvent{req, res} ) = receiver.recv() => {
-                tokio::spawn(async move {
-                    handle_preconfirmation_request(req, res, &keystores, &mut constraint_state);
-                });
+                tokio::spawn(
+                    handle_preconfirmation_request(req, res, keystores.clone(), constraint_state.clone())
+                );
             },
-            Some(slot) = constraint_state.commitment_deadline.wait() => {
-                tokio::spawn(async move {
-                    handle_commitment_deadline(slot, &mut constraint_state, &commit_boost_api, &mut fallback_builder).await;
-                });
+            Some(slot) = constraint_state_inner.commitment_deadline.wait() => {
+                tokio::spawn(
+                    handle_commitment_deadline(slot, constraint_state.clone(), commit_boost_api.clone(), fallback_builder.clone())
+                );
             },
             Some(FetchPayloadRequest { slot, response_tx }) = payload_rx.recv() => {
-                handle_local_payload_request(slot, &mut fallback_builder, response_tx).await;
+                handle_local_payload_request(slot, fallback_builder.clone(), response_tx).await;
             },
             // Some(Ok(msg)) = read.next() => {
             //     if let tokio_tungstenite::tungstenite::protocol::Message::Text(text) = msg {
@@ -230,7 +254,7 @@ async fn main() {
                 tracing::info!(slot, "Got received a new head event");
 
                 // We use None to signal that we want to fetch the latest EL head
-                if let Err(e) = constraint_state.update_head(slot).await {
+                if let Err(e) = constraint_state.lock().await.update_head(slot).await {
                     tracing::error!(err = ?e, "Occurred errors in updating the constraint state head");
                 }
             },

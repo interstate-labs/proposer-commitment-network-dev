@@ -636,6 +636,7 @@ mod tests {
             txs,
             sender:addy,
             slot: 42,
+	    chain_id: 1000,
         };
 
         // println!("preconf request {:#?}", request);
