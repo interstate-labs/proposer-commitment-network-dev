@@ -23,7 +23,7 @@ use crate::{
     delegation::{SignedDelegationMessage, SignedRevocationMessage},
 };
 
-mod builder;
+pub(crate) mod builder;
 mod block_builder;
 pub(crate) mod signature;
 mod constraints_proxy_server;

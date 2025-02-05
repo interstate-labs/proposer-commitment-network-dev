@@ -32,6 +32,7 @@ pub enum KeystoreError {
     SignatureLength(String, String),
 }
 
+#[derive(Clone)]
 pub struct Keystores{
   keypairs: Vec<Keypair>,
   chain: ChainConfig
