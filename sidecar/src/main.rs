@@ -4,14 +4,16 @@ pub use beacon_api_client::mainnet::Client;
 use commitment::request::{CommitmentRequestError, CommitmentRequestEvent};
 use metrics::{run_metrics_server, ApiMetrics};
 use state::{execution::ExecutionState, fetcher::ClientState, ConstraintState, HeadEventListener};
-use std::borrow::BorrowMut;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tracing_subscriber::fmt::Subscriber;
 
 use commitment::{run_commitment_rpc_server, PreconfResponse};
-use config::{limits::{LimitOptions, DEFAULT_GAS_LIMIT}, Config};
+use config::{
+    limits::{LimitOptions, DEFAULT_GAS_LIMIT},
+    Config,
+};
 use constraints::builder::PayloadAndBid;
 use constraints::CommitBoostApi;
 use constraints::{
@@ -22,9 +24,11 @@ use env_file_reader::read_file;
 use keystores::Keystores;
 use tokio::sync::oneshot::Sender;
 
+mod builder;
 mod commitment;
 mod config;
 mod constraints;
+mod crypto;
 mod delegation;
 mod errors;
 mod keystores;
@@ -33,8 +37,6 @@ mod onchain;
 mod state;
 mod test_utils;
 mod utils;
-mod builder;
-mod crypto;
 
 pub type BLSBytes = FixedBytes<96>;
 pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
@@ -53,7 +55,7 @@ async fn handle_preconfirmation_request(
     let slot = req.slot;
     let pubkeys = keystores.get_pubkeys();
 
-    match constraint_state.validate_preconf_request(&req) {
+    match constraint_state.validate_preconf_request(&req).await {
         Ok(pubkey) => {
             if !pubkeys.contains(&pubkey) {
                 tracing::error!(
@@ -160,7 +162,7 @@ async fn handle_local_payload_request(
 }
 
 async fn handle_head_event(slot: u64, constraint_state: Arc<Mutex<ConstraintState>>) {
-    let constraint_state = constraint_state.lock().await;
+    let mut constraint_state = constraint_state.lock().await;
 
     tracing::info!(slot, "Got received a new head event");
 
@@ -216,7 +218,9 @@ async fn main() {
         beacon_client.clone(),
         config.validator_indexes.clone(),
         config.chain.get_commitment_deadline_duration(),
-        ExecutionState::new(client_state, LimitOptions::default(), DEFAULT_GAS_LIMIT).await.expect("Failed to create Execution State")
+        ExecutionState::new(client_state, LimitOptions::default(), DEFAULT_GAS_LIMIT)
+            .await
+            .expect("Failed to create Execution State"),
     );
 
     let mut head_event_listener = HeadEventListener::run(beacon_client);
