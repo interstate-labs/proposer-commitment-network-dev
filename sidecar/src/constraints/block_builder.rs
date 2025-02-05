@@ -222,6 +222,10 @@ impl BlockBuilder {
                     hints.block_hash = None
                 }
 
+                EngineApiHint::BaseFee(fee) => {
+                    hints.base_fee = Some(fee);
+                    hints.block_hash = None
+                },
                 EngineApiHint::ValidPayload => return Ok(sealed_block),
             }
 
@@ -446,6 +450,7 @@ struct Hints {
     pub logs_bloom: Option<Bloom>,
     pub state_root: Option<B256>,
     pub block_hash: Option<B256>,
+    pub base_fee: Option<u64>,
 }
 
 /// Engine API hint values that can be fetched from the engine API
@@ -460,6 +465,7 @@ pub(crate) enum EngineApiHint {
     ReceiptsRoot(B256),
     LogsBloom(Bloom),
     ValidPayload,
+    BaseFee(u64),
 }
 
 /// Engine hinter struct that is responsible for fetching hints from the
@@ -523,7 +529,10 @@ impl EngineHinter {
             return Ok(EngineApiHint::ReceiptsRoot(B256::from_hex(hint_value)?));
         } else if raw_hint.contains("invalid bloom") {
             return Ok(EngineApiHint::LogsBloom(Bloom::from_hex(&hint_value)?));
-        };
+        } else if raw_hint.contains("invalid baseFee") {
+            return Ok(EngineApiHint::BaseFee(hint_value.parse()?))
+        }
+        ;
 
         Err(BuilderError::Custom(
             "Unexpected: failed to parse any hint from engine response".to_string(),
