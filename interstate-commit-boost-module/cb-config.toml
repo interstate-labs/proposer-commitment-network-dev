@@ -3,6 +3,7 @@ chain = "Holesky"
 [pbs]
 port = 18550
 host = "0.0.0.0"
+
 genesis_time_sec=1738648239
 beacon_rpc="http://162.55.190.235:32855"
 [[relays]]
