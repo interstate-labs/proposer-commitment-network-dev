@@ -1,32 +1,25 @@
 use alloy::{
     consensus::{Header, EMPTY_OMMER_ROOT_HASH},
-     eips::{
-        calc_excess_blob_gas, 
-        calc_next_block_base_fee, 
-        eip1559::BaseFeeParams, 
-        BlockNumberOrTag,
-        eip2718::Encodable2718, eip4895::Withdrawal
-    }, 
-    hex::FromHex, 
-    primitives::{
-        Address, Bloom, Bytes, B256, B64, U256
-    }, 
+    eips::{
+        calc_excess_blob_gas, calc_next_block_base_fee, eip1559::BaseFeeParams,
+        eip2718::Encodable2718, eip4895::Withdrawal, BlockNumberOrTag,
+    },
+    hex::FromHex,
+    primitives::{Address, Bloom, Bytes, B256, B64, U256},
     rpc::{
-        client::{ClientBuilder, RpcClient}, 
+        client::{ClientBuilder, RpcClient},
         types::{
-            Block, 
-            Withdrawals,
             engine::{
                 ExecutionPayload as AlloyExecutionPayload, ExecutionPayloadV1, ExecutionPayloadV2,
                 ExecutionPayloadV3,
             },
+            Block, Withdrawals,
         },
-    }, 
-    transports::{http::Http, TransportResult}
+    },
+    transports::{http::Http, TransportResult},
 };
 
 use reth_primitives::{proofs, BlockBody, SealedBlock, SealedHeader, TransactionSigned};
-
 
 use ethereum_consensus::{
     bellatrix::mainnet::Transaction,
@@ -43,12 +36,12 @@ use ethereum_consensus::{
     types::mainnet::ExecutionPayload as ConsensusExecutionPayload,
 };
 
-use reth_rpc_layer::{secret_to_bearer_header, JwtSecret};
 use regex::Regex;
+use reth_rpc_layer::{secret_to_bearer_header, JwtSecret};
 
-use beacon_api_client::{presets::mainnet::Client as BeaconRPCClient, StateId, BlockId};
-use serde_json::Value;
+use beacon_api_client::{presets::mainnet::Client as BeaconRPCClient, BlockId, StateId};
 use reqwest::{Client, Url};
+use serde_json::Value;
 
 use crate::config::Config;
 
@@ -67,48 +60,57 @@ const DEFAULT_EXTRA_DATA: [u8; 20] = [
 ];
 
 pub struct BlockBuilder {
-  el_rpc_client: ExecutionRpcClient,
-  beacon_rpc_client: BeaconRPCClient,
-  extra_data: Bytes,
-  fee_recipient: Address,
-  engine_hinter: EngineHinter,
-  slot_time_in_seconds: u64,
+    el_rpc_client: ExecutionRpcClient,
+    beacon_rpc_client: BeaconRPCClient,
+    extra_data: Bytes,
+    fee_recipient: Address,
+    engine_hinter: EngineHinter,
+    slot_time_in_seconds: u64,
 }
 
 impl BlockBuilder {
-  pub fn new(config: &Config) -> Self {
-    let engine_hinter = EngineHinter {
-        client: reqwest::Client::new(),
-        jwt_hex: config.jwt_hex.to_string(),
-        engine_rpc_url: config.engine_api_url.clone(),
-    };
+    pub fn new(config: &Config) -> Self {
+        let engine_hinter = EngineHinter {
+            client: reqwest::Client::new(),
+            jwt_hex: config.jwt_hex.to_string(),
+            engine_rpc_url: config.engine_api_url.clone(),
+        };
 
-    Self {
-        engine_hinter,
-        extra_data: DEFAULT_EXTRA_DATA.into(),
-        fee_recipient: config.fee_recipient,
-        beacon_rpc_client: BeaconRPCClient::new(config.beacon_api_url.clone()),
-        el_rpc_client: ExecutionRpcClient::new(config.execution_api_url.clone()),
-        slot_time_in_seconds: config.chain.get_slot_time_in_seconds(),
+        Self {
+            engine_hinter,
+            extra_data: DEFAULT_EXTRA_DATA.into(),
+            fee_recipient: config.fee_recipient,
+            beacon_rpc_client: BeaconRPCClient::new(config.beacon_api_url.clone()),
+            el_rpc_client: ExecutionRpcClient::new(config.execution_api_url.clone()),
+            slot_time_in_seconds: config.chain.get_slot_time_in_seconds(),
+        }
     }
-}
 
+    pub async fn build_sealed_block(
+        &self,
+        txs: &[TransactionSigned],
+        slot: u64,
+    ) -> Result<SealedBlock, BuilderError> {
+        let latest_block = timeout(GET_BLOCK_TIMEOUT, self.el_rpc_client.get_block(None, true))
+            .await
+            .map_err(|_| BuilderError::Timeout("Getting latest block timed out".into()))?
+            .map_err(BuilderError::RpcError)?;
 
-  pub async fn build_sealed_block( &self, txs: &[TransactionSigned], slot: u64) -> Result<SealedBlock, BuilderError>  {
-    let latest_block = timeout(GET_BLOCK_TIMEOUT, self.el_rpc_client.get_block(None, true))
-        .await
-        .map_err(|_| BuilderError::Timeout("Getting latest block timed out".into()))?
-        .map_err(BuilderError::RpcError)?;
+        tracing::debug!("got latest block");
 
-    tracing::debug!("got latest block");
-    
-    let first_block = self.el_rpc_client.get_block(Some(0), true).await?;
-    let genesis_time = first_block.header.timestamp;
+        let first_block = self.el_rpc_client.get_block(Some(0), true).await?;
+        let genesis_time = first_block.header.timestamp;
 
-    let withdrawals = self.beacon_rpc_client.get_expected_withdrawals(StateId::Head, None).await?.into_iter().map(convert_withdrawal_from_consensus_to_alloy).collect::<Vec<_>>();
-    tracing::debug!("got withdrawals");
+        let withdrawals = self
+            .beacon_rpc_client
+            .get_expected_withdrawals(StateId::Head, None)
+            .await?
+            .into_iter()
+            .map(convert_withdrawal_from_consensus_to_alloy)
+            .collect::<Vec<_>>();
+        tracing::debug!("got withdrawals");
 
-    let prev_randao = reqwest::Client::new()
+        let prev_randao = reqwest::Client::new()
             .get(
                 self.beacon_rpc_client
                     .endpoint
@@ -128,11 +130,15 @@ impl BlockBuilder {
             .unwrap();
         let prev_randao = B256::from_hex(prev_randao).unwrap();
         tracing::debug!("got prev_randao");
-        
-        let parent_beacon_block_root:B256 = B256::from_slice(&self
-            .beacon_rpc_client
-            .get_beacon_block_root(BlockId::Head)
-            .await.unwrap().to_vec());
+
+        let parent_beacon_block_root: B256 = B256::from_slice(
+            &self
+                .beacon_rpc_client
+                .get_beacon_block_root(BlockId::Head)
+                .await
+                .unwrap()
+                .to_vec(),
+        );
         tracing::debug!(parent = ?parent_beacon_block_root, "got parent_beacon_block_root");
 
         let versioned_hashes = txs
@@ -182,7 +188,13 @@ impl BlockBuilder {
         let mut i = 0;
 
         loop {
-            let header = build_header_with_hints_and_context(&latest_block, genesis_time, slot, &hints, &ctx);
+            let header = build_header_with_hints_and_context(
+                &latest_block,
+                genesis_time,
+                slot,
+                &hints,
+                &ctx,
+            );
 
             let sealed_hash = header.hash_slow();
             let sealed_header = SealedHeader::new(header, sealed_hash);
@@ -234,34 +246,33 @@ impl BlockBuilder {
 
             i += 1;
         }
-  }
+    }
 }
 
-
-pub struct ExecutionRpcClient (RpcClient<Http<Client>>);
+pub struct ExecutionRpcClient(RpcClient<Http<Client>>);
 
 impl ExecutionRpcClient {
-  pub fn new<U: Into<Url>>(url: U) -> Self {
-    let client = ClientBuilder::default().http(url.into());
-    Self(client)
-  }
-  pub async fn get_block(&self, block_number: Option<u64>, full: bool) -> TransportResult<Block> {
-    let tag = block_number.map_or(BlockNumberOrTag::Latest, BlockNumberOrTag::Number);
+    pub fn new<U: Into<Url>>(url: U) -> Self {
+        let client = ClientBuilder::default().http(url.into());
+        Self(client)
+    }
+    pub async fn get_block(&self, block_number: Option<u64>, full: bool) -> TransportResult<Block> {
+        let tag = block_number.map_or(BlockNumberOrTag::Latest, BlockNumberOrTag::Number);
 
-    self.0.request("eth_getBlockByNumber", (tag, full)).await
-  }
+        self.0.request("eth_getBlockByNumber", (tag, full)).await
+    }
 }
 
 /// convert a withdrawal from ethereum-consensus to Reth
 pub(crate) fn convert_withdrawal_from_consensus_to_alloy(
-  value: ethereum_consensus::capella::Withdrawal,
+    value: ethereum_consensus::capella::Withdrawal,
 ) -> alloy::eips::eip4895::Withdrawal {
     alloy::eips::eip4895::Withdrawal {
-      index: value.index as u64,
-      validator_index: value.validator_index as u64,
-      address: Address::from_slice(value.address.as_ref()),
-      amount: value.amount,
-  }
+        index: value.index as u64,
+        validator_index: value.validator_index as u64,
+        address: Address::from_slice(value.address.as_ref()),
+        amount: value.amount,
+    }
 }
 
 /// convert a withdrawal from Reth to ethereum-consensus
@@ -275,7 +286,6 @@ pub(crate) fn convert_withdrawal_from_reth_to_consensus(
         amount: value.amount,
     }
 }
-
 
 /// convert a sealed header into an ethereum-consensus execution payload header.
 /// This requires recalculating the withdrals and transactions roots as SSZ instead of MPT roots.
@@ -340,7 +350,8 @@ pub(crate) fn create_alloy_execution_payload(
     block: &SealedBlock,
     block_hash: B256,
 ) -> AlloyExecutionPayload {
-    let alloy_withdrawals = block.body
+    let alloy_withdrawals = block
+        .body
         .withdrawals
         .as_ref()
         .map(|withdrawals| {
@@ -462,6 +473,13 @@ pub(crate) enum EngineApiHint {
     ValidPayload,
 }
 
+pub(crate) enum EngineType {
+    Geth,
+    Reth,
+    Besu,
+    Nethermind,
+}
+
 /// Engine hinter struct that is responsible for fetching hints from the
 /// engine API to complete the sealed block. This struct is used by the
 /// fallback payload builder to fetch missing header values.
@@ -473,6 +491,30 @@ pub(crate) struct EngineHinter {
 }
 
 impl EngineHinter {
+    ///Check the type of the EL node. Throws an error if the EL node not responds
+    pub async fn get_el_node_type(&self) -> Result<EngineType, BuilderError> {
+        let auth_jwt = secret_to_bearer_header(&JwtSecret::from_hex(&self.jwt_hex)?);
+
+        let body =
+            format!(r#"{{"id":1,"jsonrpc":"2.0","method":"web3_clientVersion","params":[]}}"#,);
+
+        let raw_version = self
+            .client
+            .post(self.engine_rpc_url.as_str())
+            .header("Content-Type", "application/json")
+            .header("Authorization", auth_jwt.clone())
+            .body(body)
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        if raw_version.contains(r#""result":"Geth"#) {
+            return Ok(EngineType::Geth);
+        }
+
+        Err(BuilderError::Custom("EL node is unreachable".to_owned()))
+    }
     /// Fetch the next payload hint from the engine API to complete the sealed block.
     pub async fn fetch_next_payload_hint(
         &self,
@@ -500,30 +542,44 @@ impl EngineHinter {
             .text()
             .await?;
 
-        let Some(hint_value) = parse_geth_response(&raw_hint) else {
-            // If the hint is not found, it means that we likely got a VALID
-            // payload response or an error message that we can't parse.
-            if raw_hint.contains("\"status\":\"VALID\"") {
-                return Ok(EngineApiHint::ValidPayload);
-            } else {
-                return Err(BuilderError::InvalidEngineHint(raw_hint));
+        let el_type = match self.get_el_node_type().await {
+            Ok(el_type) => el_type,
+            Err(err) => return Err(err),
+        };
+
+        match el_type {
+            EngineType::Geth => {
+                let Some(hint_value) = parse_geth_response(&raw_hint) else {
+                    // If the hint is not found, it means that we likely got a VALID
+                    // payload response or an error message that we can't parse.
+                    if raw_hint.contains("\"status\":\"VALID\"") {
+                        return Ok(EngineApiHint::ValidPayload);
+                    } else {
+                        return Err(BuilderError::InvalidEngineHint(raw_hint));
+                    }
+                };
+
+                tracing::trace!("raw hint: {:?}", raw_hint);
+
+                // Match the hint value to the corresponding header field and return it
+                if raw_hint.contains("blockhash mismatch") {
+                    return Ok(EngineApiHint::BlockHash(B256::from_hex(hint_value)?));
+                } else if raw_hint.contains("invalid gas used") {
+                    return Ok(EngineApiHint::GasUsed(hint_value.parse()?));
+                } else if raw_hint.contains("invalid merkle root") {
+                    return Ok(EngineApiHint::StateRoot(B256::from_hex(hint_value)?));
+                } else if raw_hint.contains("invalid receipt root hash") {
+                    return Ok(EngineApiHint::ReceiptsRoot(B256::from_hex(hint_value)?));
+                } else if raw_hint.contains("invalid bloom") {
+                    return Ok(EngineApiHint::LogsBloom(Bloom::from_hex(&hint_value)?));
+                };
             }
-        };
-
-        tracing::trace!("raw hint: {:?}", raw_hint);
-
-        // Match the hint value to the corresponding header field and return it
-        if raw_hint.contains("blockhash mismatch") {
-            return Ok(EngineApiHint::BlockHash(B256::from_hex(hint_value)?));
-        } else if raw_hint.contains("invalid gas used") {
-            return Ok(EngineApiHint::GasUsed(hint_value.parse()?));
-        } else if raw_hint.contains("invalid merkle root") {
-            return Ok(EngineApiHint::StateRoot(B256::from_hex(hint_value)?));
-        } else if raw_hint.contains("invalid receipt root hash") {
-            return Ok(EngineApiHint::ReceiptsRoot(B256::from_hex(hint_value)?));
-        } else if raw_hint.contains("invalid bloom") {
-            return Ok(EngineApiHint::LogsBloom(Bloom::from_hex(&hint_value)?));
-        };
+            _ => {
+                return Err(BuilderError::Custom(
+                    "The current EL node is not supported".to_string(),
+                ));
+            }
+        }
 
         Err(BuilderError::Custom(
             "Unexpected: failed to parse any hint from engine response".to_string(),
@@ -531,55 +587,54 @@ impl EngineHinter {
     }
 }
 
-
 /// Geth Reference:
 /// - [ValidateState](<https://github.com/ethereum/go-ethereum/blob/9298d2db884c4e3f9474880e3dcfd080ef9eacfa/core/block_validator.go#L122-L151>)
 /// - [Blockhash Mismatch](<https://github.com/ethereum/go-ethereum/blob/9298d2db884c4e3f9474880e3dcfd080ef9eacfa/beacon/engine/types.go#L253-L256>)
 pub(crate) fn parse_geth_response(error: &str) -> Option<String> {
-  // Capture either the "local" or "got" value from the error message
-  let re = Regex::new(r"(?:local:|got) ([0-9a-zA-Z]+)").expect("valid regex");
+    // Capture either the "local" or "got" value from the error message
+    let re = Regex::new(r"(?:local:|got) ([0-9a-zA-Z]+)").expect("valid regex");
 
-  re.captures(error)
-      .and_then(|capture| capture.get(1).map(|matched| matched.as_str().to_string()))
+    re.captures(error)
+        .and_then(|capture| capture.get(1).map(|matched| matched.as_str().to_string()))
 }
 
 /// Build a header with the given hints and context values.
 fn build_header_with_hints_and_context(
-  latest_block: &Block,
-  genesis_time: u64,
-  slot: u64,
-  hints: &Hints,
-  context: &Context,
+    latest_block: &Block,
+    genesis_time: u64,
+    slot: u64,
+    hints: &Hints,
+    context: &Context,
 ) -> Header {
-  // Use the available hints, or default to an empty value if not present.
-  let gas_used = hints.gas_used.unwrap_or_default();
-  let receipts_root = hints.receipts_root.unwrap_or_default();
-  let logs_bloom = hints.logs_bloom.unwrap_or_default();
-  let state_root = hints.state_root.unwrap_or_default();
+    // Use the available hints, or default to an empty value if not present.
+    let gas_used = hints.gas_used.unwrap_or_default();
+    let receipts_root = hints.receipts_root.unwrap_or_default();
+    let logs_bloom = hints.logs_bloom.unwrap_or_default();
+    let state_root = hints.state_root.unwrap_or_default();
 
-  Header {
-      parent_hash: latest_block.header.hash,
-      ommers_hash: EMPTY_OMMER_ROOT_HASH,
-      beneficiary: context.fee_recipient,
-      state_root,
-      transactions_root: context.transactions_root,
-      receipts_root,
-      withdrawals_root: Some(context.withdrawals_root),
-      logs_bloom,
-      difficulty: U256::ZERO,
-      number: latest_block.header.number + 1,
-      gas_limit: latest_block.header.gas_limit as u64,
-      gas_used,
-      timestamp: genesis_time + slot * context.slot_time_in_seconds,
-      mix_hash: context.prev_randao,
-      nonce: B64::ZERO,
-      base_fee_per_gas: Some(context.base_fee),
-      blob_gas_used: Some(context.blob_gas_used),
-      excess_blob_gas: Some(context.excess_blob_gas),
-      parent_beacon_block_root: Some(context.parent_beacon_block_root),
-      requests_hash: None,
-      extra_data: context.extra_data.clone(),
-  }
+    Header {
+        parent_hash: latest_block.header.hash,
+        ommers_hash: EMPTY_OMMER_ROOT_HASH,
+        beneficiary: context.fee_recipient,
+        state_root,
+        transactions_root: context.transactions_root,
+        receipts_root,
+        withdrawals_root: Some(context.withdrawals_root),
+        logs_bloom,
+        difficulty: U256::ZERO,
+        number: latest_block.header.number + 1,
+        gas_limit: latest_block.header.gas_limit as u64,
+        gas_used,
+        timestamp: genesis_time + slot * context.slot_time_in_seconds,
+        mix_hash: context.prev_randao,
+        nonce: B64::ZERO,
+        base_fee_per_gas: Some(context.base_fee),
+        blob_gas_used: Some(context.blob_gas_used),
+        excess_blob_gas: Some(context.excess_blob_gas),
+        parent_beacon_block_root: Some(context.parent_beacon_block_root),
+        requests_hash: None,
+        extra_data: context.extra_data.clone(),
+    }
 }
 
 pub(crate) fn to_bytes32(value: B256) -> spec::Bytes32 {
@@ -597,14 +652,21 @@ pub(crate) fn to_byte_vector(value: Bloom) -> ByteVector<256> {
 #[cfg(test)]
 mod tests {
     use alloy::{
-        eips::eip2718::Encodable2718, network::{EthereumWallet, TransactionBuilder}, primitives::{hex, keccak256, Address}, signers::{k256::ecdsa::SigningKey, local::PrivateKeySigner, Signer}
+        eips::eip2718::Encodable2718,
+        network::{EthereumWallet, TransactionBuilder},
+        primitives::{hex, keccak256, Address},
+        signers::{k256::ecdsa::SigningKey, local::PrivateKeySigner, Signer},
     };
 
-    use ethereum_consensus::crypto::PublicKey as ECBlsPublicKey;
-    use crate::{constraints::Constraint, utils::create_random_bls_secretkey};    
     use crate::{
-        commitment::request::PreconfRequest, constraints::{ConstraintsMessage, SignedConstraints}, state::Block, test_utils::{default_test_transaction, get_test_config}, BLSBytes, BLS_DST_PREFIX
+        commitment::request::PreconfRequest,
+        constraints::{ConstraintsMessage, SignedConstraints},
+        state::Block,
+        test_utils::{default_test_transaction, get_test_config},
+        BLSBytes, BLS_DST_PREFIX,
     };
+    use crate::{constraints::Constraint, utils::create_random_bls_secretkey};
+    use ethereum_consensus::crypto::PublicKey as ECBlsPublicKey;
 
     #[tokio::test]
     async fn test_build_fallback_payload() -> eyre::Result<()> {
@@ -629,35 +691,45 @@ mod tests {
             let mut data = Vec::new();
             // First field is the concatenation of all the transaction hashes
             data.extend_from_slice(
-                &txs
-                  .iter()
-                  .map(|tx| tx.tx.hash().as_slice())
-                  .collect::<Vec<_>>()
-                  .concat(),
+                &txs.iter()
+                    .map(|tx| tx.tx.hash().as_slice())
+                    .collect::<Vec<_>>()
+                    .concat(),
             );
             keccak256(data)
         };
 
         let ecda_signature = signer.clone().sign_hash(&message_digest).await.unwrap();
 
-        let request = PreconfRequest {signature:ecda_signature,txs,sender:addy,slot:42, chain_id: 171000 };
+        let request = PreconfRequest {
+            signature: ecda_signature,
+            txs,
+            sender: addy,
+            slot: 42,
+            chain_id: 171000,
+        };
 
         // println!("preconf request {:#?}", request);
 
-        let validator_pubkey = ECBlsPublicKey::try_from(create_random_bls_secretkey().sk_to_pk().to_bytes().as_ref()).unwrap();
+        let validator_pubkey =
+            ECBlsPublicKey::try_from(create_random_bls_secretkey().sk_to_pk().to_bytes().as_ref())
+                .unwrap();
 
         let message = ConstraintsMessage::build(validator_pubkey, request);
 
         let signer_key = create_random_bls_secretkey();
-        let signature =  BLSBytes::from(signer_key.sign(&message.digest(), BLS_DST_PREFIX, &[]).to_bytes());
+        let signature = BLSBytes::from(
+            signer_key
+                .sign(&message.digest(), BLS_DST_PREFIX, &[])
+                .to_bytes(),
+        );
         let signed_constraints = SignedConstraints { message, signature };
 
         let mut block = Block::default();
-       
+
         block.add_constraints(signed_constraints);
-        
+
         assert_eq!(block.signed_constraints_list.len(), 1);
         Ok(())
     }
-
 }
