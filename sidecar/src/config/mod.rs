@@ -8,6 +8,7 @@ use blst::min_pk::SecretKey as BLSSecretKey;
 use alloy::primitives::Address;
 
 pub mod group_config;
+pub mod limits;
 pub use group_config::{ChainConfig, ValidatorIndexes, Chain};
 
 /// Default port for the commitment server exposed by the sidecar.
