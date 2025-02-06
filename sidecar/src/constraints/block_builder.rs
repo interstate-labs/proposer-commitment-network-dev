@@ -650,7 +650,6 @@ mod tests {
         let ecda_signature = signer.clone().sign_hash(&message_digest).await.unwrap();
 
         let request = PreconfRequest {signature:ecda_signature,txs,sender:addy,slot:42, chain_id: 171000 };
-        
 
         // println!("preconf request {:#?}", request);
 
