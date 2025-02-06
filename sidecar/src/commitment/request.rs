@@ -110,16 +110,14 @@ pub struct PreconfRequest {
 impl PreconfRequest {
   pub fn digest(&self) -> B256 {
     let mut data = Vec::new();
-    // First field is the concatenation of all the transaction hashes
-    data.extend_from_slice(
-        &self.txs
-          .iter()
-          .map(|tx| tx.tx.hash().as_slice())
-          .collect::<Vec<_>>()
-          .concat(),
-    );
+    // Include the slot field
+    data.extend_from_slice(&self.slot.to_be_bytes());
+    // Concatenation of all the transaction hashes
+    for tx in &self.txs {
+        data.extend_from_slice(tx.tx.hash().as_slice());
+    }
     keccak256(data)
-  }
+}
 
   pub fn gas_limit(&self) -> u64 {
     self.txs.iter().map(|c| c.tx.gas_limit()).sum()
