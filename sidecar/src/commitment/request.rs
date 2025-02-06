@@ -61,30 +61,26 @@ impl CommitmentRequestHandler{
       req: request.clone(),
       res: response_tx
     };
-    let _ = self.event_sender.send(event).await.map_err(|e|{
-      tracing::error!(err = ?e, "Failed in handling commitment request");
-      CommitmentRequestError::Custom("Failed in handling commitment request".to_owned())
-    });
 
-    tracing::debug!("sent request to event loop");
+    if self.event_sender.try_send(event).is_err() {
+      tracing::error!("Channel full - cannot process new commitment request");
+      return Err(CommitmentRequestError::Custom(
+          "System overloaded - please try again later".to_owned(),
+      ));
+  }
 
-    match response_rx.await {
-      // TODO: format the user response to be more clear. Right now it's just the raw
-      // signed constraints object.
-      // Docs: https://chainbound.github.io/bolt-docs/api/commitments-api#bolt_inclusionpreconfirmation
-      Ok(event_response) => {
-        match event_response {
-          Ok(data) => Ok(data),
-          Err(e) => {
-            Err(e)
-          }
-        }
-      },
+  tracing::debug!("sent request to event loop");
+  match response_rx.await {
+      Ok(event_response) => event_response,
       Err(e) => {
           tracing::error!(err = ?e, "Failed in receiving commitment request event response from event loop");
-          Err(CommitmentRequestError::Custom("Failed in receiving commitment request event response from event loop".to_string()))
+          Err(CommitmentRequestError::Custom(
+              "Failed in receiving commitment request event response from event loop".to_owned(),
+          ))
       }
-    }
+  }
+
+ 
   }
 
   pub async fn verify_ip(&self, ip: String) -> eyre::Result<bool> {
@@ -110,16 +106,14 @@ pub struct PreconfRequest {
 impl PreconfRequest {
   pub fn digest(&self) -> B256 {
     let mut data = Vec::new();
-    // First field is the concatenation of all the transaction hashes
-    data.extend_from_slice(
-        &self.txs
-          .iter()
-          .map(|tx| tx.tx.hash().as_slice())
-          .collect::<Vec<_>>()
-          .concat(),
-    );
+    // Include the slot field
+    data.extend_from_slice(&self.slot.to_be_bytes());
+    // Concatenation of all the transaction hashes
+    for tx in &self.txs {
+        data.extend_from_slice(tx.tx.hash().as_slice());
+    }
     keccak256(data)
-  }
+}
 
   pub fn gas_limit(&self) -> u64 {
     self.txs.iter().map(|c| c.tx.gas_limit()).sum()

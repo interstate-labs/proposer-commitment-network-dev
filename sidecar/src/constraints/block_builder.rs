@@ -86,20 +86,43 @@ impl BlockBuilder {
         }
     }
 
-    pub async fn build_sealed_block(
-        &self,
-        txs: &[TransactionSigned],
-        slot: u64,
-    ) -> Result<SealedBlock, BuilderError> {
-        let latest_block = timeout(GET_BLOCK_TIMEOUT, self.el_rpc_client.get_block(None, true))
-            .await
-            .map_err(|_| BuilderError::Timeout("Getting latest block timed out".into()))?
-            .map_err(BuilderError::RpcError)?;
 
-        tracing::debug!("got latest block");
 
-        let first_block = self.el_rpc_client.get_block(Some(0), true).await?;
-        let genesis_time = first_block.header.timestamp;
+const MAX_RETRIES: u32 = 5;
+const RETRY_DELAY: Duration = Duration::from_secs(2);
+
+
+
+async fn get_latest_block(&self) -> Result<Block, BuilderError> {
+    let mut retries = 0;
+    loop {
+        let res = timeout(
+            GET_BLOCK_TIMEOUT,
+            self.el_rpc_client.get_block(None, true),
+        )
+        .await;
+
+        match res {
+            Ok(block) => {
+                tracing::debug!("got latest block");
+                return block.map_err(BuilderError::RpcError);
+            }
+            Err(_) if retries <Self::MAX_RETRIES => {
+                retries += 1;
+                tokio::time::sleep(Self::RETRY_DELAY).await;
+            }
+            Err(err) => return Err(BuilderError::Timeout(format!("Getting latest block timed out after {} retries: {}", Self::MAX_RETRIES, err))),
+        }
+    }
+}
+
+
+  pub async fn build_sealed_block( &self, txs: &[TransactionSigned], slot: u64) -> Result<SealedBlock, BuilderError>  {
+
+
+        let latest_block = self.get_latest_block().await?;
+
+        let genesis_time = latest_block.header.timestamp;
 
         let withdrawals = self
             .beacon_rpc_client
@@ -234,6 +257,10 @@ impl BlockBuilder {
                     hints.block_hash = None
                 }
 
+                EngineApiHint::BaseFee(fee) => {
+                    hints.base_fee = Some(fee);
+                    hints.block_hash = None
+                },
                 EngineApiHint::ValidPayload => return Ok(sealed_block),
             }
 
@@ -457,6 +484,7 @@ struct Hints {
     pub logs_bloom: Option<Bloom>,
     pub state_root: Option<B256>,
     pub block_hash: Option<B256>,
+    pub base_fee: Option<u64>,
 }
 
 /// Engine API hint values that can be fetched from the engine API
@@ -471,6 +499,7 @@ pub(crate) enum EngineApiHint {
     ReceiptsRoot(B256),
     LogsBloom(Bloom),
     ValidPayload,
+    BaseFee(u64),
 }
 
 pub(crate) enum EngineType {
@@ -572,7 +601,10 @@ impl EngineHinter {
                     return Ok(EngineApiHint::ReceiptsRoot(B256::from_hex(hint_value)?));
                 } else if raw_hint.contains("invalid bloom") {
                     return Ok(EngineApiHint::LogsBloom(Bloom::from_hex(&hint_value)?));
-                };
+                } else if raw_hint.contains("invalid baseFee") {
+                    return Ok(EngineApiHint::BaseFee(hint_value.parse()?))
+                }
+                ;
             }
             _ => {
                 return Err(BuilderError::Custom(

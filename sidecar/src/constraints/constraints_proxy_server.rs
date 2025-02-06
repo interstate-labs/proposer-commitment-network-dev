@@ -68,6 +68,7 @@ where P: PayloadFetcher + Send + Sync + 'static,
 pub struct ConstraintsAPIProxyServer<P> {
   proxier: CommitBoostApi,
   fallback_payload: Mutex<Option<GetPayloadResponse>>,
+  fallback_bid: Mutex<Option<SignedBuilderBid>>,
   payload_fetcher: P
 }
 
@@ -76,6 +77,7 @@ impl<P> ConstraintsAPIProxyServer<P> where P: PayloadFetcher + Send + Sync, {
     Self {
         proxier,
         fallback_payload: Mutex::new(None),
+        fallback_bid: Mutex::new(None),
         payload_fetcher,
     }
   }
@@ -114,10 +116,22 @@ impl<P> ConstraintsAPIProxyServer<P> where P: PayloadFetcher + Send + Sync, {
         }
     };
 
-    let Some(payload_and_bid) = server.payload_fetcher.fetch_payload(slot).await else {
-      tracing::debug!("No fallback payload for slot {slot}");
-      return Err(CommitBoostError::FailedToFetchLocalPayload(slot));
-    };
+    // let Some(payload_and_bid) = server.payload_fetcher.fetch_payload(slot).await else {
+    //   tracing::debug!("No fallback payload for slot {slot}");
+    //   return Err(CommitBoostError::FailedToFetchLocalPayload(slot));
+    // };
+
+    let payload_and_bid = server.payload_fetcher.fetch_payload(slot).await.unwrap();
+
+    {
+        // Cache both the payload and the bid
+        let mut local_payload = server.fallback_payload.lock();
+        *local_payload = Some(payload_and_bid.payload.clone());
+ 
+        let mut local_bid = server.fallback_bid.lock();
+        *local_bid = Some(payload_and_bid.bid.clone());
+    }
+
 
     let hash = payload_and_bid.bid.message.header.block_hash.clone();
     let number = payload_and_bid.bid.message.header.block_number;
@@ -155,7 +169,17 @@ impl<P> ConstraintsAPIProxyServer<P> where P: PayloadFetcher + Send + Sync, {
     })?;
     // If we have a locally built payload, it means we signed a local header.
     // Return it and clear the cache.
-    if let Some(local_payload) = server.fallback_payload.lock().take() {
+    // if let Some(local_payload) = server.fallback_payload.lock().take() {
+    //     check_locally_built_payload_integrity(&signed_blinded_block, &local_payload)?;
+
+    //     tracing::debug!("Valid local block found, returning: {local_payload:?}");
+    //     return Ok(Json(local_payload));
+    // }
+
+    if let (Some(local_payload), Some(local_bid)) = (
+        server.fallback_payload.lock().as_ref().cloned(),
+        server.fallback_bid.lock().as_ref().cloned(),
+    ) {
         check_locally_built_payload_integrity(&signed_blinded_block, &local_payload)?;
 
         tracing::debug!("Valid local block found, returning: {local_payload:?}");
