@@ -169,14 +169,6 @@ impl TransactionExt for PooledTransactionsElement {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
-pub struct SignedConstraints {
-    /// The constraints that need to be signed.
-    pub message: ConstraintsMessage,
-    /// The signature of the proposer sidecar.
-    pub signature: FixedBytes<96>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct ConstraintsMessage {
     /// The validator publickeyt of the proposer sidecar.
     pub pubkey: ECBlsPublicKey,
@@ -411,7 +403,7 @@ impl CommitBoostApi {
 
     pub async fn send_constraints(
         &self,
-        constraints: &Vec<SignedConstraints>,
+        constraints: &Vec<ConstraintsMessage>,
     ) -> Result<(), CommitBoostError> {
         // Configure retry settings
         let max_retries = 5;
@@ -435,7 +427,7 @@ impl CommitBoostApi {
 
     async fn send_constraints_inner(
         &self,
-        constraints: &Vec<SignedConstraints>,
+        constraints: &Vec<ConstraintsMessage>,
     ) -> Result<(), CommitBoostError> {
         let response = self
             .client
@@ -455,7 +447,7 @@ impl CommitBoostApi {
 
     pub async fn send_constraints_to_be_collected(
         &self,
-        constraints: &Vec<SignedConstraints>,
+        constraints: &Vec<ConstraintsMessage>,
     ) -> Result<(), CommitBoostError> {
         let response = self
             .client
@@ -624,32 +616,5 @@ mod tests {
         let chain = ChainConfig::default();
         let digest = constraint.digest();
 
-        let signing_root = compute_signing_root(&digest, chain.commit_boost_domain()).unwrap();
-        let sig = signer.sign(signing_root.as_slice(), BLS_DST_PREFIX, &[]);
-        let signature = BLSSig::from_slice(&sig.to_bytes());
-
-        let signed_constraints = SignedConstraints {
-            message: constraint,
-            signature,
-        };
-
-        // verify the signature
-        let blst_sig = BlsSignature::from_bytes(signed_constraints.signature.as_ref()).unwrap();
-
-        let signing_root_verify =
-            compute_signing_root(&digest, chain.commit_boost_domain()).unwrap();
-        let pk =
-            blst::min_pk::PublicKey::from_bytes(signer.sk_to_pk().to_bytes().as_ref()).unwrap();
-
-        let res = blst_sig.verify(
-            true,
-            signing_root_verify.as_ref(),
-            BLS_DST_PREFIX,
-            &[],
-            &pk,
-            true,
-        );
-
-        assert!(res == blst::BLST_ERROR::BLST_SUCCESS);
     }
 }

@@ -4,7 +4,7 @@ use lighthouse_bls::Keypair;
 use lighthouse_eth2_keystore::Keystore;
 use ssz::Encode;
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     ffi::OsString,
     fmt::Debug,
     fs::{self, DirEntry, ReadDir},
@@ -34,12 +34,12 @@ pub enum KeystoreError {
 
 #[derive(Clone)]
 pub struct Keystores {
-    keypairs: Vec<Keypair>,
+    keystores: HashSet<ECBlsPublicKey>,
     chain: ChainConfig,
 }
 
 impl Keystores {
-    pub fn new(pubkeys_root_path: &Path, secrets_path: &Path, chain: &ChainConfig) -> Self {
+    pub fn new(pubkeys_root_path: &Path, chain: &ChainConfig) -> Self {
         let mut keystore_paths = Vec::new();
 
         for dir_entry in read_dir(&pubkeys_root_path.to_path_buf()).expect(&format!(
@@ -59,71 +59,27 @@ impl Keystores {
             }
         }
 
-        let mut keypairs = Vec::with_capacity(keystore_paths.len());
+        let mut keystores = HashSet::with_capacity(keystore_paths.len());
 
         for path in keystore_paths {
             let keystore = Keystore::from_json_file(path.clone())
                 .expect(&format!("invalid public key path {:#?}", path));
 
-            let pubkey = format!("0x{}", keystore.pubkey());
-
-            let mut secret_path = secrets_path.to_path_buf();
-            secret_path.push(pubkey);
-
-            let password = fs::read_to_string(secret_path.clone())
-                .expect(&format!("invalid secret path {:#?}", secret_path));
-
-            let keypair = keystore.decrypt_keypair(password.as_bytes()).unwrap();
-
-            keypairs.push(keypair);
+            let pubkey_str = format!("0x{}", keystore.pubkey());
+            let pubkey = serde_json::from_str(pubkey_str.as_str()).expect("Invalid validator pubkey string.");
+            keystores.insert(pubkey);
         }
 
         Self {
-            keypairs,
+            keystores,
             chain: chain.clone(),
         }
     }
 
     pub fn get_pubkeys(&self) -> HashSet<ECBlsPublicKey> {
-        self.keypairs
-            .iter()
-            .map(|kp| {
-                ECBlsPublicKey::try_from(kp.pk.serialize().to_vec().as_ref()).expect("valid pubkey")
-            })
-            .collect::<HashSet<_>>()
+        self.keystores.clone()
     }
 
-    /// Signs a message with the keystore signer and the Commit Boost domain
-    pub fn sign_commit_boost_root(
-        &self,
-        root: [u8; 32],
-        public_key: &ECBlsPublicKey,
-    ) -> Result<BLSSig, KeystoreError> {
-        self.sign_root(root, public_key, self.chain.commit_boost_domain())
-    }
-
-    /// Signs a message with the keystore signer.
-    fn sign_root(
-        &self,
-        root: [u8; 32],
-        public_key: &ECBlsPublicKey,
-        domain: [u8; 32],
-    ) -> Result<BLSSig, KeystoreError> {
-        let sk = self
-            .keypairs
-            .iter()
-            // `as_ssz_bytes` returns the raw bytes we need
-            .find(|kp| kp.pk.as_ssz_bytes() == public_key.as_ref())
-            .ok_or(KeystoreError::UnknownPublicKey(public_key.to_string()))?;
-
-        let signing_root = compute_signing_root(root, domain);
-
-        let sig = sk.sk.sign(signing_root.into()).as_ssz_bytes();
-        let sig = BLSSig::try_from(sig.as_slice())
-            .map_err(|e| KeystoreError::SignatureLength(hex::encode(sig), format!("{e:?}")))?;
-
-        Ok(sig)
-    }
 }
 
 fn read_dir(path: &PathBuf) -> Result<ReadDir, std::io::Error> {
@@ -270,18 +226,9 @@ mod tests {
             let keys_path = make_path(KEYSTORES_DEFAULT_PATH_TEST);
 
             let keystore_signer_from_directory =
-                Keystores::new(&keys_path, &keystores_secrets_path, &chain_config);
+                Keystores::new(&keys_path, &chain_config);
 
-            assert_eq!(keystore_signer_from_directory.keypairs.len(), 1);
-            assert_eq!(
-                keystore_signer_from_directory
-                    .keypairs
-                    .first()
-                    .expect("to get keypair")
-                    .pk
-                    .to_string(),
-                public_key
-            );
+            assert_eq!(keystore_signer_from_directory.keystores.len(), 1);
         }
     }
 }

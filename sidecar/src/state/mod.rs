@@ -41,7 +41,7 @@ use tokio::time::Sleep;
 use tokio::{sync::broadcast, task::AbortHandle};
 
 use crate::{
-    constraints::{SignedConstraints, TransactionExt},
+    constraints::{ConstraintsMessage, TransactionExt},
     metrics::ApiMetrics,
 };
 use tokio::time::error::Elapsed;
@@ -135,35 +135,35 @@ impl ConstraintState {
         }
     }
 
-    pub fn add_constraint(&mut self, slot: u64, signed_constraints: SignedConstraints) {
+    pub fn add_constraint(&mut self, slot: u64, constraints: ConstraintsMessage) {
         if let Some(block) = self.blocks.get_mut(&slot) {
-            block.add_constraints(signed_constraints);
+            block.add_constraints(constraints);
         } else {
             let mut block = Block::default();
-            block.add_constraints(signed_constraints);
+            block.add_constraints(constraints);
             self.blocks.insert(slot, block);
         }
     }
 
-    pub fn replace_constraints(&mut self, slot: u64, signed_constraints: &Vec<SignedConstraints>) {
+    pub fn replace_constraints(&mut self, slot: u64, constraints: &Vec<ConstraintsMessage>) {
         tracing::debug!("here is replace constraints function");
         if let Some(block) = self.blocks.get_mut(&slot) {
             tracing::debug!(
                 "current constraints {}",
-                block.signed_constraints_list.len()
+                block.constraints_list.len()
             );
-            block.replace_constraints(signed_constraints);
+            block.replace_constraints(constraints);
             tracing::debug!(
                 "replaced constraints {}",
-                block.signed_constraints_list.len()
+                block.constraints_list.len()
             );
         } else {
             let mut block = Block::default();
-            block.replace_constraints(signed_constraints);
+            block.replace_constraints(constraints);
             self.blocks.insert(slot, block.clone());
             tracing::debug!(
                 "replaced constraints {}",
-                block.signed_constraints_list.len()
+                block.constraints_list.len()
             );
         }
     }
@@ -514,36 +514,35 @@ impl ConstraintState {
 
 #[derive(Debug, Default, Clone)]
 pub struct Block {
-    pub signed_constraints_list: Vec<SignedConstraints>,
+    pub constraints_list: Vec<ConstraintsMessage>,
 }
 
 impl Block {
-    pub fn add_constraints(&mut self, constraints: SignedConstraints) {
-        self.signed_constraints_list.push(constraints);
+    pub fn add_constraints(&mut self, constraints: ConstraintsMessage) {
+        self.constraints_list.push(constraints);
     }
 
-    pub fn replace_constraints(&mut self, constraints: &Vec<SignedConstraints>) {
-        self.signed_constraints_list = constraints.clone();
+    pub fn replace_constraints(&mut self, constraints: &Vec<ConstraintsMessage>) {
+        self.constraints_list = constraints.clone();
     }
 
     pub fn remove_constraints(&mut self, slot: u64) {
-        self.signed_constraints_list
+        self.constraints_list
             .remove(slot.try_into().unwrap());
     }
 
     pub fn get_transactions(&self) -> Vec<PooledTransactionsElement> {
-        self.signed_constraints_list
+        self.constraints_list
             .iter()
-            .flat_map(|sc| sc.message.transactions.iter().map(|c| c.tx.clone()))
+            .flat_map(|sc| sc.transactions.iter().map(|c| c.tx.clone()))
             .collect()
     }
 
     pub fn convert_constraints_to_transactions(&self) -> Vec<TransactionSigned> {
-        self.signed_constraints_list
+        self.constraints_list
             .iter()
             .flat_map(|sc| {
-                sc.message
-                    .transactions
+                sc.transactions
                     .iter()
                     .map(|c| c.tx.clone().into_transaction())
             })
@@ -552,9 +551,9 @@ impl Block {
 
     pub fn parse_to_blobs_bundle(&self) -> BlobsBundle {
         let (commitments, proofs, blobs) =
-            self.signed_constraints_list
+            self.constraints_list
                 .iter()
-                .flat_map(|sc| sc.message.transactions.iter())
+                .flat_map(|sc| sc.transactions.iter())
                 .filter_map(|c| c.tx.blob_sidecar())
                 .fold(
                     (Vec::new(), Vec::new(), Vec::new()),
@@ -582,13 +581,12 @@ impl Block {
     }
 
     pub fn transactions_count(&self) -> usize {
-        self.signed_constraints_list.len()
+        self.constraints_list.len()
     }
 
     pub fn committed_gas(&self) -> u64 {
-        self.signed_constraints_list.iter().fold(0, |acc, sc| {
+        self.constraints_list.iter().fold(0, |acc, sc| {
             acc + sc
-                .message
                 .transactions
                 .iter()
                 .fold(0, |acc, c| acc + c.tx.gas_limit())

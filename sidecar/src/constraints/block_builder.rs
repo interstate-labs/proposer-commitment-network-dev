@@ -690,7 +690,7 @@ mod tests {
 
     use crate::{
         commitment::request::PreconfRequest,
-        constraints::{ConstraintsMessage, SignedConstraints},
+        constraints::ConstraintsMessage,
         state::Block,
         test_utils::{default_test_transaction, get_test_config},
         BLSBytes, BLS_DST_PREFIX,
@@ -746,20 +746,14 @@ mod tests {
                 .unwrap();
 
         let message = ConstraintsMessage::build(validator_pubkey, request);
-
-        let signer_key = create_random_bls_secretkey();
-        let signature = BLSBytes::from(
-            signer_key
-                .sign(&message.digest(), BLS_DST_PREFIX, &[])
-                .to_bytes(),
-        );
-        let signed_constraints = SignedConstraints { message, signature };
+        
+        let constraints =  message;
 
         let mut block = Block::default();
 
-        block.add_constraints(signed_constraints);
+        block.add_constraints(constraints);
 
-        assert_eq!(block.signed_constraints_list.len(), 1);
+        assert_eq!(block.constraints_list.len(), 1);
         Ok(())
     }
 }

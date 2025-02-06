@@ -18,7 +18,7 @@ use constraints::builder::PayloadAndBid;
 use constraints::CommitBoostApi;
 use constraints::{
     run_constraints_proxy_server, ConstraintsMessage, FallbackBuilder, FallbackPayloadFetcher,
-    FetchPayloadRequest, SignedConstraints, TransactionExt,
+    FetchPayloadRequest, TransactionExt,
 };
 use env_file_reader::read_file;
 use keystores::Keystores;
@@ -66,26 +66,26 @@ async fn handle_preconfirmation_request(
             }
 
             // TODO::Validate preconfirmation request
-            let mut signed_contraints_list: Vec<SignedConstraints> = vec![];
+            let mut contraints_list: Vec<ConstraintsMessage> = vec![];
 
             for tx in req.txs.iter() {
                 let message = ConstraintsMessage::from_tx(pubkey.clone(), slot, tx.clone());
-                let digest = message.digest();
+                // let digest = message.digest();
 
-                let signature = keystores.sign_commit_boost_root(digest, &pubkey);
+                // let signature = keystores.sign_commit_boost_root(digest, &pubkey);
 
-                let signed_constraints = match signature {
-                    Ok(signature) => SignedConstraints { message, signature },
-                    Err(e) => {
-                        tracing::error!(?e, "Failed to sign constraints");
-                        return;
-                    }
-                };
+                // let signed_constraints = match signature {
+                //     Ok(signature) => SignedConstraints { message, signature },
+                //     Err(e) => {
+                //         tracing::error!(?e, "Failed to sign constraints");
+                //         return;
+                //     }
+                // };
 
                 ApiMetrics::increment_preconfirmed_transactions_count(tx.tx.tx_type());
 
-                constraint_state.add_constraint(slot, signed_constraints.clone());
-                signed_contraints_list.push(signed_constraints.clone());
+                constraint_state.add_constraint(slot, message.clone());
+                contraints_list.push(message);
 
                 // match commit_boost_api.send_constraints_to_be_collected(&vec![signed_constraints.clone()]).await {
                 //     Ok(_) => tracing::info!(?signed_constraints,"Sent constratins successfully to be collected."),
@@ -94,7 +94,7 @@ async fn handle_preconfirmation_request(
             }
             let response = serde_json::to_value(PreconfResponse {
                 ok: true,
-                signed_contraints_list,
+                contraints_list,
             })
             .map_err(Into::into);
             let _ = res.send(response).ok();
@@ -127,7 +127,7 @@ async fn handle_commitment_deadline(
     tracing::debug!("removed constraints at slot {slot}");
 
     match commit_boost_api
-        .send_constraints(&block.signed_constraints_list)
+        .send_constraints(&block.constraints_list)
         .await
     {
         Ok(_) => tracing::info!("Sent constratins successfully."),
@@ -195,7 +195,6 @@ async fn main() {
 
     let keystores = Keystores::new(
         &config.keystore_pubkeys_path,
-        &config.keystore_secrets_path,
         &config.chain,
     );
 
