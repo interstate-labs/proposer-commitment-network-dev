@@ -24,5 +24,8 @@ RUN apt-get update && apt-get install -y libssl-dev ca-certificates && rm -rf /v
 RUN useradd -m appuser
 USER appuser
 
+# Mount allowlisted directories as read-only volumes
+VOLUME ["/keystores:ro", "/work/interstate-protocol/proposer-commitment-network/.env:ro"]
+
 ENTRYPOINT ["/interstate-boost"]
 CMD ["--read-only"]
