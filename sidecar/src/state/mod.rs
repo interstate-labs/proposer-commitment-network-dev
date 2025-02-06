@@ -176,6 +176,9 @@ impl ConstraintState {
         &mut self,
         request: &PreconfRequest,
     ) -> Result<ECBlsPublicKey, StateError> {
+
+        validate_blob(&mut self, request);
+
         // Check if the chain is eth mainnet
         if request.chain_id != self.config.id {
             return Err(StateError::Custom(format!(
@@ -510,6 +513,63 @@ impl ConstraintState {
         }
         Ok(())
     }
+}
+
+fn validate_blob(
+    &mut self,
+    request: &PreconfRequest
+) -> Result<_, StateError> {
+        // Additional EIP-4844 validations
+        for tx in request.txs.iter() {
+            if let PooledTransactionsElement::BlobTransaction(blob_tx) = tx {
+                // Check that there is at least one blob
+                if blob_tx.transaction.sidecar.blobs.is_empty() {
+                    return Err(StateError::Custom(
+                        "Blob transaction must contain at least one blob".to_string(),
+                    ));
+                }
+
+                // Check versioned hashes start with correct version
+                for hash in &blob_tx.transaction.tx.blob_versioned_hashes {
+                    if hash[0] != VERSIONED_HASH_VERSION_KZG {
+                        return Err(StateError::Custom(
+                            "Invalid versioned hash version".to_string(),
+                        ));
+                    }
+                }
+
+                // Check max_fee_per_blob_gas exceeds current base fee
+                let current_base_fee = self.execution.get_base_fee_per_blob_gas().await?;
+                if blob_tx.transaction.tx.max_fee_per_blob_gas < current_base_fee {
+                    return Err(StateError::Custom(
+                        "max_fee_per_blob_gas is less than current base fee".to_string(),
+                    ));
+                }
+
+                // Check account balance covers total max fees
+                let max_total_fee = blob_tx.transaction.tx.gas_limit * blob_tx.transaction.tx.max_fee_per_gas
+                    + blob_tx.transaction.sidecar.blobs.len() as u64 * blob_tx.transaction.tx.max_fee_per_blob_gas;
+
+                let account_balance = self.execution.get_balance(blob_tx.transaction.sender()).await?;
+                if account_balance < max_total_fee {
+                    return Err(StateError::Custom(
+                        "Insufficient account balance to cover max fees".to_string(),
+                    ));
+                }
+            }
+        }
+
+        // Check total blob gas is within per block limit
+        let total_blob_gas: u64 = request.txs.iter()
+            .filter_map(|tx| tx.blob_sidecar())
+            .map(|bs| bs.blobs.len() as u64)
+            .sum();
+
+        if total_blob_gas > MAX_BLOB_GAS_PER_BLOCK {
+            return Err(StateError::Custom(
+                "Total blob gas exceeds per block limit".to_string(),
+            ));
+        }
 }
 
 #[derive(Debug, Default, Clone)]
