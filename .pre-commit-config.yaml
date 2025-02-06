@@ -1,0 +1,26 @@
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --manifest-path sidecar/Cargo.toml -- --check
+        language: system
+        files: ^sidecar/
+        
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --manifest-path interstate-commit-boost/Cargo.toml -- --check
+        language: system
+        files: ^interstate-commit-boost/
+        
+      - id: cargo-build
+        name: cargo build
+        entry: cargo build --manifest-path sidecar/Cargo.toml
+        language: system
+        files: ^sidecar/
+        
+      - id: cargo-build
+        name: cargo build
+        entry: cargo build --manifest-path interstate-commit-boost/Cargo.toml
+        language: system
+        files: ^interstate-commit-boost/

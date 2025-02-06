@@ -23,7 +23,7 @@ const LATEST_HEAD: &str = "latest_head";
 
 //  Histograms --------------------------------------------------------------
 const HTTP_REQUESTS_DURATION_SECONDS: &str = "http_requests_duration_seconds";
-
+const ACCOUNT_STATES: &str = "interstate_sidecar_account_states";
 /// Metrics for the commitments API.
 #[derive(Debug, Clone, Copy)]
 pub struct ApiMetrics;
@@ -109,6 +109,10 @@ impl ApiMetrics {
         let labels = [("method", method), ("path", path), ("status", status)];
         counter!(HTTP_REQUESTS_COUNTER, &labels).increment(1);
         histogram!(HTTP_REQUESTS_DURATION_SECONDS, &labels,).record(duration.as_secs_f64());
+    }
+
+    pub fn set_account_states(count: usize) {
+        gauge!(ACCOUNT_STATES).set(count as f64);
     }
 }
 

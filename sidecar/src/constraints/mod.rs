@@ -23,7 +23,7 @@ use crate::{
     delegation::{SignedDelegationMessage, SignedRevocationMessage},
 };
 
-mod builder;
+pub(crate) mod builder;
 mod block_builder;
 pub(crate) mod signature;
 mod constraints_proxy_server;
@@ -247,6 +247,15 @@ impl Constraint {
             Some(fee.min(priority_fee))
         } else {
             Some(fee)
+        }
+    }
+
+    pub fn validate(&self) -> bool {
+        let recovered = self.tx.recover_signer();
+
+        match (self.sender, recovered) {
+            (Some(sender), Some(recovered)) if sender == recovered => true,
+            _ => false,
         }
     }
 
