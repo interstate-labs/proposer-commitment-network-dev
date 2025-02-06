@@ -1,18 +1,22 @@
 use axum::{
     body::{self, Body},
-    extract::{Path, Request, State},
+    extract::{ConnectInfo, Path, Request, State},
+    middleware::Next,
     response::Html,
     routing::{get, post},
     Json, Router,
 };
+use axum_client_ip::{InsecureClientIp, SecureClientIp};
 use parking_lot::Mutex;
-use reqwest::StatusCode;
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use reqwest::{StatusCode, Url};
+use std::{net::{IpAddr, SocketAddr}, sync::Arc, time::Duration};
 use tokio::sync::{mpsc, oneshot};
 
 use ethereum_consensus::{
     builder::SignedValidatorRegistration, deneb::mainnet::SignedBlindedBeaconBlock, Fork,
 };
+use tower::ServiceBuilder;
+use tower_http::trace::TraceLayer;
 
 use crate::{
     config::Config,
@@ -57,6 +61,7 @@ where
     let proxy_server = Arc::new(ConstraintsAPIProxyServer::new(
         commit_boost_api.clone(),
         fallback_payload_fetcher,
+        config.beacon_api_url.clone()
     ));
 
     let router = Router::new()
@@ -71,45 +76,66 @@ where
             GET_PAYLOAD_PATH,
             post(ConstraintsAPIProxyServer::get_payload),
         )
+        .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()))
         .with_state(proxy_server);
 
-    let addr: SocketAddr = SocketAddr::from(([127, 0, 0, 1], config.builder_port));
+    let addr: SocketAddr = SocketAddr::from(([0, 0, 0, 0], config.builder_port));
 
     //TODO: replace a listening port as a builder
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
     tokio::spawn(async {
-        axum::serve(listener, router).await.unwrap();
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await.unwrap();
     });
 
     tracing::info!("commit boost server is listening on .. {}", addr);
 
     Ok(commit_boost_api)
 }
-
 pub struct ConstraintsAPIProxyServer<P> {
     proxier: CommitBoostApi,
     fallback_payload: Mutex<Option<GetPayloadResponse>>,
     fallback_bid: Mutex<Option<SignedBuilderBid>>,
     payload_fetcher: P,
+    beacon_api_url: Url,
 }
 
 impl<P> ConstraintsAPIProxyServer<P>
 where
     P: PayloadFetcher + Send + Sync,
 {
-    pub fn new(proxier: CommitBoostApi, payload_fetcher: P) -> Self {
+    pub fn new(proxier: CommitBoostApi, payload_fetcher: P, beacon_api_url: Url) -> Self {
         Self {
             proxier,
             fallback_payload: Mutex::new(None),
             fallback_bid: Mutex::new(None),
             payload_fetcher,
+            beacon_api_url,
         }
     }
 
-    async fn status(State(server): State<Arc<ConstraintsAPIProxyServer<P>>>) -> StatusCode {
-        tracing::debug!("handling STATUS request");
-
+    fn is_ip_in_url(beacon_api_url: &Url, my_socket_addr: SocketAddr) -> bool {
+        let my_ip = my_socket_addr.ip(); // Extract only the IP from SocketAddr
+    
+        match beacon_api_url.host() {
+            Some(url::Host::Ipv4(ip)) => ip == my_ip,
+            Some(url::Host::Ipv6(ip)) => ip == my_ip,
+            _ => false, // URL has a domain name, not an IP
+        }
+    }
+    
+    async fn status(
+        ConnectInfo(addr): ConnectInfo<SocketAddr>,
+        State(server): State<Arc<ConstraintsAPIProxyServer<P>>>,
+    ) -> StatusCode {
+        tracing::debug!(?addr, "handling STATUS request");
+        if Self::is_ip_in_url(&server.beacon_api_url, addr) == false {
+            return StatusCode::UNAUTHORIZED
+        }
         let status = match server.proxier.status().await {
             Ok(status) => status,
             Err(err) => {
@@ -117,15 +143,18 @@ where
                 StatusCode::INTERNAL_SERVER_ERROR
             }
         };
-
         status
     }
 
     async fn get_header(
+        ConnectInfo(addr): ConnectInfo<SocketAddr>,
         State(server): State<Arc<ConstraintsAPIProxyServer<P>>>,
         Path(params): Path<GetHeaderParams>,
     ) -> Result<Json<VersionedValue<SignedBuilderBid>>, CommitBoostError> {
         tracing::debug!("handling GET_HEADER request");
+        if Self::is_ip_in_url(&server.beacon_api_url, addr) == false {
+            return Err(CommitBoostError::Unauthorized("".to_string()));
+        }
         let slot = params.slot;
         match tokio::time::timeout(
             GET_HEADER_WITH_PROOFS_TIMEOUT,
@@ -186,10 +215,14 @@ where
     }
 
     async fn get_payload(
+        ConnectInfo(addr): ConnectInfo<SocketAddr>,
         State(server): State<Arc<ConstraintsAPIProxyServer<P>>>,
         req: Request<Body>,
     ) -> Result<Json<GetPayloadResponse>, CommitBoostError> {
         tracing::debug!("handling GET_PAYLOAD request");
+        if Self::is_ip_in_url(&server.beacon_api_url, addr) == false {
+            return Err(CommitBoostError::Unauthorized("".to_string()));
+        }
         let body_bytes = body::to_bytes(req.into_body(), MAX_BLINDED_BLOCK_LENGTH)
             .await
             .map_err(|e| {
@@ -240,10 +273,14 @@ where
     }
 
     async fn register_validators(
+        ConnectInfo(addr): ConnectInfo<SocketAddr>,
         State(server): State<Arc<ConstraintsAPIProxyServer<P>>>,
         Json(registers): Json<Vec<SignedValidatorRegistration>>,
     ) -> Result<StatusCode, CommitBoostError> {
         tracing::debug!("handling REGISTER_VALIDATORS_REQUEST");
+        if Self::is_ip_in_url(&server.beacon_api_url, addr) == false {
+            return Err(CommitBoostError::Unauthorized("".to_string()));
+        }
         server
             .proxier
             .register_validators(registers)
