@@ -160,13 +160,13 @@ impl TransactionExt for PooledTransactionsElement {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
-pub struct SignedConstraints {
-    /// The constraints that need to be signed.
-    pub message: ConstraintsMessage,
-    /// The signature of the proposer sidecar.
-    pub signature: FixedBytes<96>,
-}
+// #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+// pub struct SignedConstraints {
+//     /// The constraints that need to be signed.
+//     pub message: ConstraintsMessage,
+//     /// The signature of the proposer sidecar.
+//     pub signature: FixedBytes<96>,
+// }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct ConstraintsMessage {
@@ -377,7 +377,7 @@ impl CommitBoostApi {
 
     pub async fn send_constraints(
         &self,
-        constraints: &Vec<SignedConstraints>,
+        constraints: &Vec<ConstraintsMessage>,
     ) -> Result<(), CommitBoostError> {
         // Configure retry settings
         let max_retries = 5;
@@ -404,7 +404,7 @@ impl CommitBoostApi {
 
     async fn send_constraints_inner(
         &self,
-        constraints: &Vec<SignedConstraints>,
+        constraints: &Vec<ConstraintsMessage>,
     ) -> Result<(), CommitBoostError> {
         let response = self
             .client
@@ -424,7 +424,7 @@ impl CommitBoostApi {
 
     pub async fn send_constraints_to_be_collected(
         &self,
-        constraints: &Vec<SignedConstraints>,
+        constraints: &Vec<ConstraintsMessage>,
     ) -> Result<(), CommitBoostError> {
 
         let response = self
@@ -584,7 +584,7 @@ mod tests {
         let sig = signer.sign(signing_root.as_slice(), BLS_DST_PREFIX, &[]);
         let signature = BLSSig::from_slice(&sig.to_bytes());
 
-        let signed_constraints = SignedConstraints { message: constraint, signature };
+        let signed_constraints = ConstraintsMessage { message: constraint, signature };
 
         // verify the signature
         let blst_sig = BlsSignature::from_bytes(signed_constraints.signature.as_ref()).unwrap();

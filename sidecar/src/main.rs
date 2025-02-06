@@ -8,7 +8,7 @@ pub use beacon_api_client::mainnet::Client;
 
 use env_file_reader::read_file;
 
-use constraints::{run_constraints_proxy_server, ConstraintsMessage, FallbackBuilder, FallbackPayloadFetcher, FetchPayloadRequest, SignedConstraints, TransactionExt };
+use constraints::{run_constraints_proxy_server, ConstraintsMessage, FallbackBuilder, FallbackPayloadFetcher, FetchPayloadRequest, TransactionExt };
 use commitment::{run_commitment_rpc_server, PreconfResponse};
 use config::Config;
 use keystores::Keystores;
@@ -112,17 +112,17 @@ async fn main() {
 
                             let signature = keystores.sign_commit_boost_root(digest, &pubkey);
 
-                            let signed_constraints = match signature {
-                                Ok(signature) => SignedConstraints { message, signature },
-                                Err(e) => {
-                                    tracing::error!(?e, "Failed to sign constraints");
-                                    return;
-                                }
-                            };
+                            // let signed_constraints = match signature {
+                            //     Ok(signature) => ConstraintsMessage { message, signature },
+                            //     Err(e) => {
+                            //         tracing::error!(?e, "Failed to sign constraints");
+                            //         return;
+                            //     }
+                            // };
 
                             ApiMetrics::increment_preconfirmed_transactions_count(tx.tx.tx_type());
 
-                            constraint_state.add_constraint(slot, signed_constraints);
+                            constraint_state.add_constraint(slot, message);
                                     
                             // match commit_boost_api.send_constraints_to_be_collected(&vec![signed_constraints.clone()]).await {
                             //     Ok(_) => tracing::info!(?signed_constraints,"Sent constratins successfully to be collected."),

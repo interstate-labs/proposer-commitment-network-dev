@@ -623,7 +623,7 @@ mod tests {
     use ethereum_consensus::crypto::PublicKey as ECBlsPublicKey;
     use crate::{constraints::Constraint, utils::create_random_bls_secretkey};    
     use crate::{
-        commitment::request::PreconfRequest, constraints::{ConstraintsMessage, SignedConstraints}, state::Block, test_utils::{default_test_transaction, get_test_config}, BLSBytes, BLS_DST_PREFIX
+        commitment::request::PreconfRequest, constraints::{ConstraintsMessage}, state::Block, test_utils::{default_test_transaction, get_test_config}, BLSBytes, BLS_DST_PREFIX
     };
 
     #[tokio::test]
@@ -675,7 +675,7 @@ mod tests {
 
         let signer_key = create_random_bls_secretkey();
         let signature =  BLSBytes::from(signer_key.sign(&message.digest(), BLS_DST_PREFIX, &[]).to_bytes());
-        let signed_constraints = SignedConstraints { message, signature };
+        let signed_constraints = ConstraintsMessage { message, signature };
 
         let mut block = Block::default();
        

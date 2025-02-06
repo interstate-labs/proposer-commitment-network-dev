@@ -12,7 +12,7 @@ use futures::{future::poll_fn, Future, FutureExt};
 use tokio::time::Sleep;
 use tokio::time::error::Elapsed;
 use ethereum_consensus::{crypto::PublicKey as ECBlsPublicKey, deneb:: { BeaconBlockHeader, mainnet::{Blob, BlobsBundle} }, crypto::{KzgCommitment, KzgProof}, phase0::mainnet::SLOTS_PER_EPOCH};
-use crate::{constraints::{SignedConstraints, TransactionExt}, metrics::ApiMetrics};
+use crate::{constraints::{ConstraintsMessage, TransactionExt}, metrics::ApiMetrics};
 use crate::commitment::request::PreconfRequest;
 use crate::config::ValidatorIndexes;
 
@@ -91,7 +91,7 @@ impl ConstraintState {
     }
   }
   
-  pub fn add_constraint(&mut self, slot: u64, signed_constraints: SignedConstraints) {
+  pub fn add_constraint(&mut self, slot: u64, signed_constraints: ConstraintsMessage) {
     if let Some(block) = self.blocks.get_mut(&slot) {
         block.add_constraints(signed_constraints);
     } else {
@@ -101,7 +101,7 @@ impl ConstraintState {
     }
   }
 
-  pub fn replace_constraints(&mut self, slot: u64, signed_constraints: &Vec<SignedConstraints>) {
+  pub fn replace_constraints(&mut self, slot: u64, signed_constraints: &Vec<ConstraintsMessage>) {
     tracing::debug!("here is replace constraints function");
     if let Some(block) = self.blocks.get_mut(&slot) {
         tracing::debug!("current constraints {}", block.signed_constraints_list.len()); 
@@ -264,15 +264,15 @@ impl ConstraintState {
 
 #[derive(Debug, Default, Clone)]
 pub struct  Block {
-  pub signed_constraints_list: Vec<SignedConstraints>
+  pub signed_constraints_list: Vec<ConstraintsMessage>
 }
 
 impl Block {
-  pub fn add_constraints ( &mut self, constraints: SignedConstraints) {
+  pub fn add_constraints ( &mut self, constraints: ConstraintsMessage) {
     self.signed_constraints_list.push(constraints);
   }
 
-  pub fn replace_constraints ( &mut self, constraints: &Vec<SignedConstraints>) {
+  pub fn replace_constraints ( &mut self, constraints: &Vec<ConstraintsMessage>) {
     self.signed_constraints_list = constraints.clone();
   }
   
@@ -284,7 +284,7 @@ impl Block {
   pub fn get_transactions(&self) -> Vec<PooledTransactionsElement> {
     self.signed_constraints_list
         .iter()
-        .flat_map(|sc| sc.message.transactions.iter().map(|c| c.tx.clone()))
+        .flat_map(|sc| sc.transactions.iter().map(|c| c.tx.clone()))
         .collect()
   }
   
@@ -292,8 +292,7 @@ impl Block {
     self.signed_constraints_list
         .iter()
         .flat_map(|sc| {
-            sc.message
-                .transactions
+            sc.transactions
                 .iter()
                 .map(|c| c.tx.clone().into_transaction())
         })
@@ -304,7 +303,7 @@ impl Block {
     let (commitments, proofs, blobs) =
         self.signed_constraints_list
             .iter()
-            .flat_map(|sc| sc.message.transactions.iter())
+            .flat_map(|sc| sc.transactions.iter())
             .filter_map(|c| c.tx.blob_sidecar())
             .fold(
                 (Vec::new(), Vec::new(), Vec::new()),
@@ -337,7 +336,7 @@ impl Block {
  
  pub fn committed_gas(&self) -> u64 {
     self.signed_constraints_list.iter().fold(0, |acc, sc| {
-        acc + sc.message.transactions.iter().fold(0, |acc, c| acc + c.tx.gas_limit())
+        acc + sc.transactions.iter().fold(0, |acc, c| acc + c.tx.gas_limit())
     })
 }
 
