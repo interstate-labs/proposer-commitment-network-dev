@@ -58,6 +58,9 @@ metrics-exporter-prometheus = { version = "0.15.3", features = [
   "http-listener",
 ] }
 axum-client-ip = "0.6.1"
+tower = "0.5.2"
+tower-http = "0.6.2"
+url = "2.5.4"
 
 [dev-dependencies]
 alloy-node-bindings = "0.2.0"  

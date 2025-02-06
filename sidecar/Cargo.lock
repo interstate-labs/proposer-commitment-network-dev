@@ -3959,10 +3959,13 @@ dependencies = [
  "thiserror 2.0.11",
  "tokio",
  "tokio-tungstenite",
+ "tower 0.5.2",
+ "tower-http",
  "tracing",
  "tracing-subscriber",
  "tree_hash 0.5.2",
  "tree_hash_derive",
+ "url",
 ]
 
 [[package]]
