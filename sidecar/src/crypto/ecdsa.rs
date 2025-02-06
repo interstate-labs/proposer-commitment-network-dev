@@ -14,7 +14,9 @@ pub trait SignableECDSA {
     }
 
     fn verify(&self, signature: &Signature, pubkey: &PublicKey) -> bool {
-        secp256k1::Secp256k1::new().verify_ecdsa(&self.digest(), signature, pubkey).is_ok()
+        secp256k1::Secp256k1::new()
+            .verify_ecdsa(&self.digest(), signature, pubkey)
+            .is_ok()
     }
 }
 

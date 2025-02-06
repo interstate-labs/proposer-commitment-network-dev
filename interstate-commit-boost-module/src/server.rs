@@ -1,12 +1,12 @@
 use alloy::{
-    eips::merge::EPOCH_SLOTS, primitives::{utils::format_ether, B256, U256}, 
-    rpc::types::beacon::{relay::ValidatorRegistration, BlsPublicKey}
+    eips::merge::EPOCH_SLOTS,
+    primitives::{utils::format_ether, B256, U256},
+    rpc::types::beacon::{relay::ValidatorRegistration, BlsPublicKey},
 };
 use cb_pbs::{register_validator, BuilderApi, BuilderApiState, PbsState};
 use reqwest::Url;
 use serde_json::Value;
 
-use std::{time::{SystemTime,UNIX_EPOCH}};
 use async_trait::async_trait;
 use axum::{
     extract::{Path, State},
@@ -18,15 +18,16 @@ use axum::{
 use cb_common::{
     pbs::{
         error::{PbsError, ValidationError},
-        GetHeaderResponse, RelayClient, SignedExecutionPayloadHeader, EMPTY_TX_ROOT_HASH, HEADER_START_TIME_UNIX_MS,
+        GetHeaderResponse, RelayClient, SignedExecutionPayloadHeader, EMPTY_TX_ROOT_HASH,
+        HEADER_START_TIME_UNIX_MS,
     },
     types::Chain,
     utils::get_user_agent_with_version,
-
 };
 use eyre::{ContextCompat, Result};
 use futures::{future::join_all, stream::FuturesUnordered, StreamExt};
 use serde::Serialize;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
@@ -34,18 +35,21 @@ use std::{
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn, Instrument};
 
-use crate::{metrics::{
-    ERROR_CODE_TIMEOUT_STR, INVALID_BIDS_COUNT, LATENCY_BY_RELAY, RELAY_HTTP_STATUS,
-    TAG_GET_HEADER_WITH_PROOFS,
-}, types::ValidationContext};
+use crate::{
+    metrics::{
+        ERROR_CODE_TIMEOUT_STR, INVALID_BIDS_COUNT, LATENCY_BY_RELAY, RELAY_HTTP_STATUS,
+        TAG_GET_HEADER_WITH_PROOFS,
+    },
+    types::ValidationContext,
+};
 
 use super::{
     constraints::ConstraintStore,
     error::PbsClientError,
     proofs::validate_multiproofs,
     types::{
-        Config, FetchHeaderParams, GetHeaderWithProofsResponse, RequestConfig, SignedDelegation, SignedRevocation,
-        VerifiedConstraints
+        Config, FetchHeaderParams, GetHeaderWithProofsResponse, RequestConfig, SignedDelegation,
+        SignedRevocation, VerifiedConstraints,
     },
 };
 
@@ -66,14 +70,18 @@ pub struct BuilderRuntimeState {
     #[allow(unused)]
     config: Config,
     constraints: ConstraintStore,
-    client: reqwest::Client
+    client: reqwest::Client,
 }
 
 impl BuilderApiState for BuilderRuntimeState {}
 
 impl BuilderRuntimeState {
     pub fn new(settings: Config) -> Self {
-        Self { config: settings, constraints: ConstraintStore::new(), client: reqwest::Client::new() }
+        Self {
+            config: settings,
+            constraints: ConstraintStore::new(),
+            client: reqwest::Client::new(),
+        }
     }
 }
 
@@ -93,7 +101,7 @@ impl BuilderApi<BuilderRuntimeState> for ConstraintsApi {
         request_headers: HeaderMap,
         runtime_state: PbsState<BuilderRuntimeState>,
     ) -> eyre::Result<()> {
-        let slot =  fetch_current_slot_number(&runtime_state.data.config.beacon_rpc).await?;
+        let slot = fetch_current_slot_number(&runtime_state.data.config.beacon_rpc).await?;
 
         info!("Clearing constraints before slot {slot}");
         runtime_state.data.constraints.remove_before_constraints(slot);
@@ -122,7 +130,9 @@ async fn submit_constraints(
 ) -> Result<impl IntoResponse, PbsClientError> {
     info!("Sending {} constraints to the relays for processing", constraints.len());
 
-    let current_slot = fetch_current_slot_number(&state.data.config.beacon_rpc).await.map_err(|e| PbsClientError::BadRequest)?;
+    let current_slot = fetch_current_slot_number(&state.data.config.beacon_rpc)
+        .await
+        .map_err(|e| PbsClientError::BadRequest)?;
 
     // Save constraints for the slot to verify proofs against later.
     for signed_constraints in &constraints {
@@ -181,7 +191,6 @@ async fn get_header_with_proofs(
     Path(params): Path<FetchHeaderParams>,
     req_headers: HeaderMap,
 ) -> Result<impl IntoResponse, PbsClientError> {
-    
     let ms_into_slot = ms_into_slot(params.slot, state.data.config.genesis_time_sec);
 
     let max_timeout_ms = state
@@ -256,7 +265,7 @@ async fn get_header_with_proofs(
                     let message_json = HashMap::from([("message", message)]);
                     match state.data.client.post(url).json(&message_json).send().await {
                         Ok(_) => info!("Sent an event to the listener"),
-                        Err(err) => error!("Failed to send an event to the listener: {:?}", err)
+                        Err(err) => error!("Failed to send an event to the listener: {:?}", err),
                     };
 
                     // Save the proofs per block hash
@@ -275,10 +284,9 @@ async fn get_header_with_proofs(
         }
     }
 
-
     if let Some(header) = relay_bids.iter().max_by_key(|v| v.value()) {
         Ok((StatusCode::OK, axum::Json(header)).into_response())
-    }else {
+    } else {
         Ok(StatusCode::NO_CONTENT.into_response())
     }
 
@@ -304,7 +312,6 @@ async fn send_timed_get_header(
         "/eth/v1/builder/header_with_proofs/{}/{}/{}",
         params.slot, params.parent_hash, params.pubkey
     ))?;
-
 
     if relay.config.enable_timing_games {
         if let Some(target_ms) = relay.config.target_first_request_ms {
@@ -336,7 +343,7 @@ async fn send_timed_get_header(
                             url: url.clone(),
                             headers: headers.clone(),
                         },
-                        validation.clone()
+                        validation.clone(),
                     )
                     .in_current_span(),
                 ));
@@ -391,7 +398,7 @@ async fn send_timed_get_header(
         relay,
         chain,
         RequestConfig { timeout_ms: timeout_left_ms, url, headers },
-        validation
+        validation,
     )
     .await
     .map(|(_, maybe_header)| maybe_header)
@@ -458,10 +465,10 @@ async fn send_one_get_header(
     }
 
     let get_header_response: GetHeaderWithProofsResponse = serde_json::from_slice(&response_bytes)
-    .map_err(|e| PbsError::JsonDecode {
-        err: e,
-        raw: String::from_utf8(response_bytes.to_vec()).unwrap_or("Invalid UTF-8".to_string()),
-    })?;
+        .map_err(|e| PbsError::JsonDecode {
+            err: e,
+            raw: String::from_utf8(response_bytes.to_vec()).unwrap_or("Invalid UTF-8".to_string()),
+        })?;
     debug!(
         latency = ?request_latency,
         block_hash = %get_header_response.data.message.header.block_hash,
@@ -582,8 +589,7 @@ where
     }
 }
 
-
-fn timestamp_of_slot_start_millis(slot: u64 , genesis: u64) -> u64 {
+fn timestamp_of_slot_start_millis(slot: u64, genesis: u64) -> u64 {
     let seconds_since_genesis = genesis + slot * SECONDS_PER_SLOT;
     seconds_since_genesis * MILLIS_PER_SECOND
 }

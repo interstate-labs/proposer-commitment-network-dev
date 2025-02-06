@@ -86,40 +86,39 @@ impl BlockBuilder {
         }
     }
 
+    const MAX_RETRIES: u32 = 5;
+    const RETRY_DELAY: Duration = Duration::from_secs(2);
 
+    async fn get_latest_block(&self) -> Result<Block, BuilderError> {
+        let mut retries = 0;
+        loop {
+            let res = timeout(GET_BLOCK_TIMEOUT, self.el_rpc_client.get_block(None, true)).await;
 
-const MAX_RETRIES: u32 = 5;
-const RETRY_DELAY: Duration = Duration::from_secs(2);
-
-
-
-async fn get_latest_block(&self) -> Result<Block, BuilderError> {
-    let mut retries = 0;
-    loop {
-        let res = timeout(
-            GET_BLOCK_TIMEOUT,
-            self.el_rpc_client.get_block(None, true),
-        )
-        .await;
-
-        match res {
-            Ok(block) => {
-                tracing::debug!("got latest block");
-                return block.map_err(BuilderError::RpcError);
+            match res {
+                Ok(block) => {
+                    tracing::debug!("got latest block");
+                    return block.map_err(BuilderError::RpcError);
+                }
+                Err(_) if retries < Self::MAX_RETRIES => {
+                    retries += 1;
+                    tokio::time::sleep(Self::RETRY_DELAY).await;
+                }
+                Err(err) => {
+                    return Err(BuilderError::Timeout(format!(
+                        "Getting latest block timed out after {} retries: {}",
+                        Self::MAX_RETRIES,
+                        err
+                    )))
+                }
             }
-            Err(_) if retries <Self::MAX_RETRIES => {
-                retries += 1;
-                tokio::time::sleep(Self::RETRY_DELAY).await;
-            }
-            Err(err) => return Err(BuilderError::Timeout(format!("Getting latest block timed out after {} retries: {}", Self::MAX_RETRIES, err))),
         }
     }
-}
 
-
-  pub async fn build_sealed_block( &self, txs: &[TransactionSigned], slot: u64) -> Result<SealedBlock, BuilderError>  {
-
-
+    pub async fn build_sealed_block(
+        &self,
+        txs: &[TransactionSigned],
+        slot: u64,
+    ) -> Result<SealedBlock, BuilderError> {
         let latest_block = self.get_latest_block().await?;
 
         let genesis_time = latest_block.header.timestamp;
@@ -260,7 +259,7 @@ async fn get_latest_block(&self) -> Result<Block, BuilderError> {
                 EngineApiHint::BaseFee(fee) => {
                     hints.base_fee = Some(fee);
                     hints.block_hash = None
-                },
+                }
                 EngineApiHint::ValidPayload => return Ok(sealed_block),
             }
 
@@ -602,9 +601,8 @@ impl EngineHinter {
                 } else if raw_hint.contains("invalid bloom") {
                     return Ok(EngineApiHint::LogsBloom(Bloom::from_hex(&hint_value)?));
                 } else if raw_hint.contains("invalid baseFee") {
-                    return Ok(EngineApiHint::BaseFee(hint_value.parse()?))
-                }
-                ;
+                    return Ok(EngineApiHint::BaseFee(hint_value.parse()?));
+                };
             }
             _ => {
                 return Err(BuilderError::Custom(

@@ -1,4 +1,7 @@
-use axum::{response::{IntoResponse, Response}, Json};
+use axum::{
+    response::{IntoResponse, Response},
+    Json,
+};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize, Serializer};
 
@@ -42,7 +45,6 @@ pub enum CommitBoostError {
     Generic(String),
     #[error("Locally-built payload does not match expected signed header")]
     LocalPayloadIntegrity(#[from] super::constraints::LocalPayloadIntegrityError),
-    
 }
 
 impl IntoResponse for CommitBoostError {
@@ -93,9 +95,11 @@ impl IntoResponse for CommitBoostError {
             CommitBoostError::Generic(err) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, Json(err)).into_response()
             }
-            CommitBoostError::LocalPayloadIntegrity(local_payload_integrity_error) => {
-                (StatusCode::BAD_REQUEST, local_payload_integrity_error.to_string()).into_response()
-            },
+            CommitBoostError::LocalPayloadIntegrity(local_payload_integrity_error) => (
+                StatusCode::BAD_REQUEST,
+                local_payload_integrity_error.to_string(),
+            )
+                .into_response(),
         }
     }
 }

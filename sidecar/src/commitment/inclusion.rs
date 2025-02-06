@@ -1,13 +1,19 @@
+use super::super::state::pricing::{InclusionPricer, PricingError};
+use super::{
+    super::crypto::SignerECDSA,
+    misc::{IntoSigned, Signed},
+};
+use crate::utils::transactions::{deserialize_txs, serialize_txs, FullTransaction};
+use crate::{
+    state::signature::{AlloySignatureWrapper, SignatureError},
+    utils::transactions::TransactionExtForPooledTransaction,
+};
 use alloy_v092::{
     consensus::Transaction,
     primitives::{keccak256, Address, PrimitiveSignature, B256},
 };
 use serde::{Deserialize, Serialize};
 use tracing::info;
-use crate::{state::signature::{AlloySignatureWrapper, SignatureError}, utils::transactions::TransactionExtForPooledTransaction};
-use crate::utils::transactions::{deserialize_txs, serialize_txs, FullTransaction};
-use super::{super::crypto::SignerECDSA, misc::{IntoSigned, Signed}};
-use super::super::state::pricing::{PricingError, InclusionPricer};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -51,9 +57,10 @@ impl CommitmentRequest {
         signer: &S,
     ) -> eyre::Result<SignedCommitment> {
         match self {
-            Self::Inclusion(req) => {
-                req.commit_and_sign(signer).await.map(SignedCommitment::Inclusion)
-            }
+            Self::Inclusion(req) => req
+                .commit_and_sign(signer)
+                .await
+                .map(SignedCommitment::Inclusion),
         }
     }
 
@@ -67,7 +74,6 @@ impl CommitmentRequest {
 #[cfg_attr(test, derive(Default))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct InclusionRequest {
-
     pub slot: u64,
 
     #[serde(deserialize_with = "deserialize_txs", serialize_with = "serialize_txs")]
@@ -152,13 +158,11 @@ impl InclusionRequest {
         min_inclusion_profit: u64,
         max_base_fee: u128,
     ) -> Result<bool, PricingError> {
-
         let mut local_preconfirmed_gas = preconfirmed_gas;
         for tx in &self.txs {
-
             let min_priority_fee = pricing
-                .calculate_min_priority_fee(tx.gas_limit(), preconfirmed_gas)? +
-                min_inclusion_profit;
+                .calculate_min_priority_fee(tx.gas_limit(), preconfirmed_gas)?
+                + min_inclusion_profit;
 
             let tip = tx.effective_tip_per_gas(max_base_fee).unwrap_or_default();
             if tip < min_priority_fee as u128 {
@@ -200,12 +204,16 @@ impl InclusionRequest {
 }
 
 impl InclusionRequest {
-
     pub fn digest(&self) -> B256 {
         let mut data = Vec::new();
 
         data.extend_from_slice(
-            &self.txs.iter().map(|tx| tx.hash().as_slice()).collect::<Vec<_>>().concat(),
+            &self
+                .txs
+                .iter()
+                .map(|tx| tx.hash().as_slice())
+                .collect::<Vec<_>>()
+                .concat(),
         );
 
         data.extend_from_slice(&self.slot.to_le_bytes());

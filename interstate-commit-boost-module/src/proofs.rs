@@ -3,7 +3,7 @@ use alloy::primitives::{TxHash, B256};
 use super::types::{ConstraintsWithProofData, InclusionProofs};
 
 #[derive(Debug, thiserror::Error)]
-pub enum ProofValidationError  {
+pub enum ProofValidationError {
     #[error("Mismatch between leaves and indices lengths")]
     LengthMismatch,
     #[error("Mismatch between provided and expected leaves")]
@@ -25,17 +25,17 @@ pub fn validate_multiproofs(
     constraints: &[ConstraintsWithProofData],
     proofs: &InclusionProofs,
     root: B256,
-) -> Result<(), ProofValidationError > {
+) -> Result<(), ProofValidationError> {
     // Ensure the lengths of leaves and indices match
     if proofs.transaction_hashes.len() != proofs.generalized_indexes.len() {
-        return Err(ProofValidationError ::LengthMismatch);
+        return Err(ProofValidationError::LengthMismatch);
     }
 
     let total_leaves = calculate_total_leaves(constraints);
 
     // Check if the total leaves matches the proofs provided
     if total_leaves != proofs.total_leaves() {
-        return Err(ProofValidationError ::LeavesMismatch);
+        return Err(ProofValidationError::LeavesMismatch);
     }
 
     // Get all the leaves from the saved constraints
@@ -60,7 +60,7 @@ pub fn validate_multiproofs(
 
         // If the hash is not found in the constraints cache, return an error
         if !found {
-            return Err(ProofValidationError ::MissingHash(*hash));
+            return Err(ProofValidationError::MissingHash(*hash));
         }
     }
 
@@ -71,7 +71,7 @@ pub fn validate_multiproofs(
         &proofs.generalized_indexes,
         root,
     )
-    .map_err(|_| ProofValidationError ::VerificationFailed)?;
+    .map_err(|_| ProofValidationError::VerificationFailed)?;
 
     Ok(())
 }

@@ -1,5 +1,5 @@
 use cb_common::config::load_pbs_custom_config;
-use cb_pbs::{ PbsState, PbsService };
+use cb_pbs::{PbsService, PbsState};
 use eyre::Result;
 
 mod constraints;

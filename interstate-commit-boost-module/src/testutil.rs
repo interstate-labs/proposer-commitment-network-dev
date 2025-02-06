@@ -19,10 +19,14 @@ pub fn extract_transactions() -> (B256, Vec<Bytes>) {
     let tx_list = beacon_block.message.body.execution_payload.transactions().unwrap();
 
     let transaction_data: Vec<Bytes> =
-    tx_list.into_iter().map(|tx| Bytes::from(tx.to_vec())).collect();
+        tx_list.into_iter().map(|tx| Bytes::from(tx.to_vec())).collect();
 
-    let root_hash =
-        beacon_block.message.body.execution_payload.to_execution_payload_header().transactions_root();
+    let root_hash = beacon_block
+        .message
+        .body
+        .execution_payload
+        .to_execution_payload_header()
+        .transactions_root();
 
     (B256::from_slice(root_hash.as_ref()), transaction_data)
 }

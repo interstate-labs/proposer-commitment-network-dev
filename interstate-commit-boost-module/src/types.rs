@@ -1,8 +1,11 @@
 use alloy::{
     consensus::{Signed, TxEip4844Variant, TxEip4844WithSidecar, TxEnvelope},
     eips::eip2718::{Decodable2718, Eip2718Error, Eip2718Result, Encodable2718},
-    primitives::{keccak256,Bytes, TxHash, B256, U256},
-    rpc::types::{beacon::{BlsPublicKey, BlsSignature}, Block},
+    primitives::{keccak256, Bytes, TxHash, B256, U256},
+    rpc::types::{
+        beacon::{BlsPublicKey, BlsSignature},
+        Block,
+    },
     signers::k256::sha2::{Digest, Sha256},
 };
 use alloy_rlp::{BufMut, Encodable};
@@ -12,8 +15,8 @@ use parking_lot::RwLock;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use ssz_derive::{Decode, Encode};
-use tree_hash::TreeHash;
 use std::{ops::Deref, sync::Arc};
+use tree_hash::TreeHash;
 
 use cb_common::{
     constants::COMMIT_BOOST_DOMAIN,
@@ -23,11 +26,10 @@ use cb_common::{
     types::Chain,
 };
 
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub genesis_time_sec: u64,
-    pub beacon_rpc: Url
+    pub beacon_rpc: Url,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -108,16 +110,18 @@ impl TryFrom<ConstraintsMessage> for ConstraintsWithProofData {
             .iter()
             .map(|raw_tx| {
                 let Some(is_type_3) = raw_tx.first().map(|type_id| type_id == &0x03) else {
-                    return Err(Eip2718Error::RlpError(alloy_rlp::Error::Custom("empty RLP bytes")));
+                    return Err(Eip2718Error::RlpError(alloy_rlp::Error::Custom(
+                        "empty RLP bytes",
+                    )));
                 };
-            
+
                 // For blob transactions (type 3), we need to make sure to strip out the blob sidecar when
                 // calculating both the transaction hash and the hash tree root
                 if !is_type_3 {
                     let tx_hash = keccak256(raw_tx);
                     return Ok((tx_hash, hash_tree_root_raw_tx(raw_tx.to_vec())));
                 }
-            
+
                 let envelope = TxEnvelope::decode_2718(&mut raw_tx.as_ref())?;
                 let TxEnvelope::Eip4844(signed_tx) = envelope else {
                     unreachable!("we have already checked it is not a type 3 transaction")
@@ -135,7 +139,7 @@ impl TryFrom<ConstraintsMessage> for ConstraintsWithProofData {
                         let new_envelope = TxEnvelope::from(signed);
                         let mut buf = Vec::new();
                         new_envelope.encode_2718(&mut buf);
-            
+
                         Ok((tx_hash, hash_tree_root_raw_tx(buf)))
                     }
                 }
@@ -190,9 +194,9 @@ pub struct SignedDelegation {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct DelegationMessage {
-   pub action: u8,
-   pub validator_pubkey: BlsPublicKey,
-   pub delegatee_pubkey: BlsPublicKey
+    pub action: u8,
+    pub validator_pubkey: BlsPublicKey,
+    pub delegatee_pubkey: BlsPublicKey,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
@@ -205,7 +209,7 @@ pub struct SignedRevocation {
 pub struct RevocationMessage {
     pub action: u8,
     pub validator_pubkey: BlsPublicKey,
-    pub delegatee_pubkey: BlsPublicKey
+    pub delegatee_pubkey: BlsPublicKey,
 }
 
 pub type GetHeaderWithProofsResponse = VersionedResponse<SignedExecutionPayloadHeaderWithProofs>;
@@ -221,7 +225,7 @@ pub struct SignedExecutionPayloadHeaderWithProofs {
 pub enum InclusionProofsEnum {
     #[default]
     Null,
-    InclusionProofs
+    InclusionProofs,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Encode, Decode)]
@@ -242,7 +246,6 @@ impl InclusionProofs {
     }
 }
 
-
 impl Deref for SignedExecutionPayloadHeaderWithProofs {
     type Target = SignedExecutionPayloadHeader;
 
@@ -260,8 +263,8 @@ pub struct RequestConfig {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct BidWithInclusionProofs {
-   pub bid: VersionedResponse<SignedExecutionPayloadHeader>,
-   pub proofs: InclusionProofs
+    pub bid: VersionedResponse<SignedExecutionPayloadHeader>,
+    pub proofs: InclusionProofs,
 }
 
 fn hash_tree_root_raw_tx(raw_tx: Vec<u8>) -> tree_hash::Hash256 {
