@@ -20,6 +20,9 @@ WORKDIR /usr/local/bin
 COPY --from=builder /app/target/release/interstate-boost /
 RUN apt-get update && apt-get install -y libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 
+# Mount allowlisted directories as read-only volumes
+VOLUME ["/keystores:ro", "/work/interstate-protocol/proposer-commitment-network/.env:ro"]
+
 # Create a non-root user and switch to it
 RUN useradd -m appuser
 USER appuser
