@@ -3942,6 +3942,7 @@ dependencies = [
  "ethereum_ssz",
  "eyre",
  "futures",
+ "jsonwebtoken",
  "lru",
  "metrics",
  "metrics-exporter-prometheus",

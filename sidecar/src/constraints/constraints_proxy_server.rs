@@ -1,32 +1,60 @@
-use std::{net::SocketAddr, sync::Arc, time::Duration};
-use axum::{body::{self, Body}, extract::{Path, State, Request}, response::Html, routing::{ get, post }, Json, Router};
+use axum::{
+    body::{self, Body},
+    extract::{Path, Request, State},
+    middleware::Next,
+    response::{Html, Response},
+    routing::{get, post},
+    Json, Router,
+};
 use parking_lot::Mutex;
 use reqwest::StatusCode;
-use tokio::sync::{oneshot, mpsc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
+use tokio::sync::{mpsc, oneshot};
 
-use ethereum_consensus::{builder::SignedValidatorRegistration, deneb::mainnet::SignedBlindedBeaconBlock, Fork};
+use ethereum_consensus::{
+    builder::SignedValidatorRegistration, deneb::mainnet::SignedBlindedBeaconBlock, Fork,
+};
 
-use crate::{config::Config, constraints::{CommitBoostApi, GET_HEADER_PATH, GET_PAYLOAD_PATH, REGISTER_VALIDATORS_PATH, STATUS_PATH}, delegation::load_signed_delegations, errors::CommitBoostError};
+use crate::{
+    config::Config,
+    constraints::{
+        CommitBoostApi, GET_HEADER_PATH, GET_PAYLOAD_PATH, REGISTER_VALIDATORS_PATH, STATUS_PATH,
+    },
+    delegation::load_signed_delegations,
+    errors::CommitBoostError,
+};
 
-use super::{builder::{GetHeaderParams, GetPayloadResponse, PayloadAndBid, SignedBuilderBid}, VersionedValue};
+use super::{
+    builder::{GetHeaderParams, GetPayloadResponse, PayloadAndBid, SignedBuilderBid},
+    VersionedValue,
+};
 
 const MAX_BLINDED_BLOCK_LENGTH: usize = 1024 * 1024;
 
 const GET_HEADER_WITH_PROOFS_TIMEOUT: Duration = Duration::from_millis(500);
 
+use jsonwebtoken::{decode, DecodingKey, Validation};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Claims {
+    sub: String,
+    exp: usize,
+}
 
 pub async fn run_constraints_proxy_server<P>(
-  config: &Config,
-  fallback_payload_fetcher: P
+    config: &Config,
+    fallback_payload_fetcher: P,
 ) -> eyre::Result<CommitBoostApi>
-where P: PayloadFetcher + Send + Sync + 'static,
-{   
-    let mut delegations = Vec::new(); 
+where
+    P: PayloadFetcher + Send + Sync + 'static,
+{
+    let mut delegations = Vec::new();
     if let Some(delegations_path) = &config.delegations_path {
         match load_signed_delegations(delegations_path) {
             Ok(contents) => {
                 tracing::info!("Loaded {} delegations", contents.len());
-                delegations.extend(contents);                
+                delegations.extend(contents);
             }
             Err(e) => {
                 tracing::error!(%e, "Failed to load delegations");
@@ -34,162 +62,219 @@ where P: PayloadFetcher + Send + Sync + 'static,
         }
     }
 
-    let commit_boost_api: CommitBoostApi = CommitBoostApi::new(config.collector_url.clone(), &delegations);
-    let proxy_server = Arc::new(ConstraintsAPIProxyServer::new(commit_boost_api.clone(), fallback_payload_fetcher));
+    let jwt = &config.jwt_hex.clone();
+
+    let commit_boost_api: CommitBoostApi =
+        CommitBoostApi::new(config.collector_url.clone(), &delegations);
+    let proxy_server = Arc::new(ConstraintsAPIProxyServer::new(
+        commit_boost_api.clone(),
+        fallback_payload_fetcher,
+    ));
+
+    
+    let shared_secret = Arc::new(jwt.clone());
+    let jwt_auth = {
+        let secret = shared_secret.clone(); // Clone once here
+        move |request: Request, next: Next| {
+            let secret = secret.clone();
+            async move {
+                let auth_header = request
+                    .headers()
+                    .get("Authorization")
+                    .and_then(|h| h.to_str().ok());
+
+                if let Some(token) = auth_header.and_then(|h| h.strip_prefix("Bearer ")) {
+                    match decode::<Claims>(
+                        token,
+                        &DecodingKey::from_secret(secret.as_bytes()), // ✅ FIXED: Ensure correct secret format
+                        &Validation::default(),
+                    ) {
+                        Ok(_) => return Ok(next.run(request).await),
+                        Err(err) => {
+                            eprintln!("JWT Decoding Failed: {:?}", err); // ✅ Print JWT error
+                        }
+                    }
+                }
+
+                Err(StatusCode::UNAUTHORIZED)
+            }
+        }
+    };
 
     let router = Router::new()
-    .route("/", get(description))
-    .route(STATUS_PATH, get(ConstraintsAPIProxyServer::status))
-    .route(
-        REGISTER_VALIDATORS_PATH,
-        post(ConstraintsAPIProxyServer::register_validators),
-    )
-    .route(GET_HEADER_PATH, get(ConstraintsAPIProxyServer::get_header))
-    .route(GET_PAYLOAD_PATH, post(ConstraintsAPIProxyServer::get_payload))
-    .with_state(proxy_server);
+        .route("/", get(description))
+        .route(STATUS_PATH, get(ConstraintsAPIProxyServer::status))
+        .route(
+            REGISTER_VALIDATORS_PATH,
+            post(ConstraintsAPIProxyServer::register_validators),
+        )
+        .route(GET_HEADER_PATH, get(ConstraintsAPIProxyServer::get_header))
+        .route(
+            GET_PAYLOAD_PATH,
+            post(ConstraintsAPIProxyServer::get_payload),
+        )
+        .layer(axum::middleware::from_fn(jwt_auth))
+        .with_state(proxy_server);
 
-    let addr: SocketAddr = SocketAddr::from(([0,0,0,0], config.builder_port));
+    let addr: SocketAddr = SocketAddr::from(([0, 0, 0, 0], config.builder_port));
 
     //TODO: replace a listening port as a builder
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
-    tokio::spawn( async {
+    tokio::spawn(async {
         axum::serve(listener, router).await.unwrap();
     });
 
     tracing::info!("commit boost server is listening on .. {}", addr);
 
     Ok(commit_boost_api)
-
 }
-
-
 
 pub struct ConstraintsAPIProxyServer<P> {
-  proxier: CommitBoostApi,
-  fallback_payload: Mutex<Option<GetPayloadResponse>>,
-  payload_fetcher: P
+    proxier: CommitBoostApi,
+    fallback_payload: Mutex<Option<GetPayloadResponse>>,
+    payload_fetcher: P,
 }
 
-impl<P> ConstraintsAPIProxyServer<P> where P: PayloadFetcher + Send + Sync, {
-  pub fn new(proxier: CommitBoostApi, payload_fetcher:P) -> Self {
-    Self {
-        proxier,
-        fallback_payload: Mutex::new(None),
-        payload_fetcher,
-    }
-  }
-  
-  async fn status(State(server):State<Arc<ConstraintsAPIProxyServer<P>>>) -> StatusCode {
-    tracing::debug!("handling STATUS request");
-
-    let status = match server.proxier.status().await {
-        Ok(status) => status,
-        Err(err) => {
-            tracing::error!(%err, "Failed in getting status from commit-boost");
-            StatusCode::INTERNAL_SERVER_ERROR
+impl<P> ConstraintsAPIProxyServer<P>
+where
+    P: PayloadFetcher + Send + Sync,
+{
+    pub fn new(proxier: CommitBoostApi, payload_fetcher: P) -> Self {
+        Self {
+            proxier,
+            fallback_payload: Mutex::new(None),
+            payload_fetcher,
         }
-    };
+    }
 
-    status
-  }
+    async fn status(State(server): State<Arc<ConstraintsAPIProxyServer<P>>>) -> StatusCode {
+        tracing::debug!("handling STATUS request");
 
-  async fn get_header( State(server):State<Arc<ConstraintsAPIProxyServer<P>>>, Path(params): Path<GetHeaderParams>) -> Result<Json<VersionedValue<SignedBuilderBid>>, CommitBoostError> {
-    tracing::debug!("handling GET_HEADER request");
-    let slot = params.slot;
-    match tokio::time::timeout(
+        let status = match server.proxier.status().await {
+            Ok(status) => status,
+            Err(err) => {
+                tracing::error!(%err, "Failed in getting status from commit-boost");
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+        };
+
+        status
+    }
+
+    async fn get_header(
+        State(server): State<Arc<ConstraintsAPIProxyServer<P>>>,
+        Path(params): Path<GetHeaderParams>,
+    ) -> Result<Json<VersionedValue<SignedBuilderBid>>, CommitBoostError> {
+        tracing::debug!("handling GET_HEADER request");
+        let slot = params.slot;
+        match tokio::time::timeout(
             GET_HEADER_WITH_PROOFS_TIMEOUT,
             server.proxier.get_header_with_proofs(params),
         )
-        .await {
-        Ok(header) => {
-          let mut fallback_payload = server.fallback_payload.lock();
-          *fallback_payload = None;
+        .await
+        {
+            Ok(header) => {
+                let mut fallback_payload = server.fallback_payload.lock();
+                *fallback_payload = None;
 
-          tracing::debug!(?header, "got valid proofs of header");
-          return Ok(Json(header?));
-        },
-        Err(err) => {
-            tracing::error!(?err, "Failed in getting header with proof from commit-boost");
+                tracing::debug!(?header, "got valid proofs of header");
+                return Ok(Json(header?));
+            }
+            Err(err) => {
+                tracing::error!(
+                    ?err,
+                    "Failed in getting header with proof from commit-boost"
+                );
+            }
+        };
+
+        let Some(payload_and_bid) = server.payload_fetcher.fetch_payload(slot).await else {
+            tracing::debug!("No fallback payload for slot {slot}");
+            return Err(CommitBoostError::FailedToFetchLocalPayload(slot));
+        };
+
+        let hash = payload_and_bid.bid.message.header.block_hash.clone();
+        let number = payload_and_bid.bid.message.header.block_number;
+        tracing::debug!( %hash, "Fetched local payload for slot {slot}");
+
+        {
+            // Since we've signed a local header, set the payload for
+            // the following `get_payload` request.
+            let mut local_payload = server.fallback_payload.lock();
+            *local_payload = Some(payload_and_bid.payload);
         }
-    };
 
-    let Some(payload_and_bid) = server.payload_fetcher.fetch_payload(slot).await else {
-      tracing::debug!("No fallback payload for slot {slot}");
-      return Err(CommitBoostError::FailedToFetchLocalPayload(slot));
-    };
+        let versioned_bid = VersionedValue::<SignedBuilderBid> {
+            version: Fork::Deneb,
+            data: payload_and_bid.bid,
+            meta: Default::default(),
+        };
 
-    let hash = payload_and_bid.bid.message.header.block_hash.clone();
-    let number = payload_and_bid.bid.message.header.block_number;
-    tracing::debug!( %hash, "Fetched local payload for slot {slot}");
-
-    {
-        // Since we've signed a local header, set the payload for
-        // the following `get_payload` request.
-        let mut local_payload = server.fallback_payload.lock();
-        *local_payload = Some(payload_and_bid.payload);
+        tracing::info!(%hash, number, ?versioned_bid, "Returned a fallback payload header");
+        Ok(Json(versioned_bid))
     }
 
-    let versioned_bid = VersionedValue::<SignedBuilderBid> {
-        version: Fork::Deneb,
-        data: payload_and_bid.bid,
-        meta: Default::default(),
-    };
+    async fn get_payload(
+        State(server): State<Arc<ConstraintsAPIProxyServer<P>>>,
+        req: Request<Body>,
+    ) -> Result<Json<GetPayloadResponse>, CommitBoostError> {
+        tracing::debug!("handling GET_PAYLOAD request");
+        let body_bytes = body::to_bytes(req.into_body(), MAX_BLINDED_BLOCK_LENGTH)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to read request body");
+                e
+            })?;
 
-    tracing::info!(%hash, number, ?versioned_bid, "Returned a fallback payload header");
-    Ok(Json(versioned_bid))
-  }
+        // Convert to signed blinded beacon block
+        let signed_blinded_block = serde_json::from_slice::<SignedBlindedBeaconBlock>(&body_bytes)
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to parse signed blinded block");
+                e
+            })?;
+        // If we have a locally built payload, it means we signed a local header.
+        // Return it and clear the cache.
+        if let Some(local_payload) = server.fallback_payload.lock().take() {
+            check_locally_built_payload_integrity(&signed_blinded_block, &local_payload)?;
 
-  async fn get_payload( State(server): State<Arc<ConstraintsAPIProxyServer<P>>>, req: Request<Body>) -> Result<Json<GetPayloadResponse>, CommitBoostError> {
-    tracing::debug!("handling GET_PAYLOAD request");
-    let body_bytes = body::to_bytes(req.into_body(), MAX_BLINDED_BLOCK_LENGTH).await.map_err(|e| {
-        tracing::error!(error = %e, "Failed to read request body");
-        e
-    })?;
+            tracing::debug!("Valid local block found, returning: {local_payload:?}");
+            return Ok(Json(local_payload));
+        }
 
-    // Convert to signed blinded beacon block
-    let signed_blinded_block = serde_json::from_slice::<SignedBlindedBeaconBlock>(&body_bytes)
-    .map_err(|e| {
-        tracing::error!(error = %e, "Failed to parse signed blinded block");
-        e
-    })?;
-    // If we have a locally built payload, it means we signed a local header.
-    // Return it and clear the cache.
-    if let Some(local_payload) = server.fallback_payload.lock().take() {
-        check_locally_built_payload_integrity(&signed_blinded_block, &local_payload)?;
-
-        tracing::debug!("Valid local block found, returning: {local_payload:?}");
-        return Ok(Json(local_payload));
-    }
-
-    match server.proxier
+        match server
+            .proxier
             .get_payload(signed_blinded_block)
             .await
             .map(Json)
             .map_err(|e| {
                 tracing::error!(%e, "Failed to get payload from mev-boost");
                 e
-            })
-    {
-        Ok(payload) => return Ok(payload),
-        Err(err) => {
-            tracing::error!("Failed in getting payload from commit-boost");
-            return Err(err);
-        }
-    };
-  }
+            }) {
+            Ok(payload) => return Ok(payload),
+            Err(err) => {
+                tracing::error!("Failed in getting payload from commit-boost");
+                return Err(err);
+            }
+        };
+    }
 
-  async fn register_validators( State(server):State<Arc<ConstraintsAPIProxyServer<P>>>, Json(registers):Json<Vec<SignedValidatorRegistration>>) -> Result<StatusCode, CommitBoostError> {
-    tracing::debug!("handling REGISTER_VALIDATORS_REQUEST");
-    server.proxier.register_validators(registers).await.map(|_| StatusCode::OK)
-  }
-
+    async fn register_validators(
+        State(server): State<Arc<ConstraintsAPIProxyServer<P>>>,
+        Json(registers): Json<Vec<SignedValidatorRegistration>>,
+    ) -> Result<StatusCode, CommitBoostError> {
+        tracing::debug!("handling REGISTER_VALIDATORS_REQUEST");
+        server
+            .proxier
+            .register_validators(registers)
+            .await
+            .map(|_| StatusCode::OK)
+    }
 }
 
-async fn description() -> Html<& 'static str> {
-  Html("This is an endpoint to interact with commit-boost")
+async fn description() -> Html<&'static str> {
+    Html("This is an endpoint to interact with commit-boost")
 }
-
 
 #[derive(Debug)]
 pub struct FetchPayloadRequest {
@@ -242,7 +327,6 @@ impl PayloadFetcher for NoopPayloadFetcher {
     }
 }
 
-
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum LocalPayloadIntegrityError {
     #[error(
@@ -274,7 +358,6 @@ macro_rules! assert_payload_fields_eq {
         }
     };
 }
-
 
 fn check_locally_built_payload_integrity(
     signed_blinded_block: &SignedBlindedBeaconBlock,

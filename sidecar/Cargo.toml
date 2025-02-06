@@ -58,6 +58,7 @@ metrics-exporter-prometheus = { version = "0.15.3", features = [
   "http-listener",
 ] }
 axum-client-ip = "0.6.1"
+jsonwebtoken = "9.3.0"
 
 [dev-dependencies]
 alloy-node-bindings = "0.2.0"  
