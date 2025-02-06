@@ -168,12 +168,55 @@ impl TransactionExt for PooledTransactionsElement {
     }
 }
 
+use interstate_commit_boost_module::types::ConstraintsMessage;
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct SignedConstraints {
     /// The constraints that need to be signed.
     pub message: ConstraintsMessage,
     /// The signature of the proposer sidecar.
     pub signature: FixedBytes<96>,
+}
+
+impl SignedConstraints {
+    fn serialize_txs<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(self.message.transactions.len()))?;
+        for tx in &self.message.transactions {
+            seq.serialize_element(&tx.tx)?;
+        }
+        seq.end()
+    }
+
+    fn deserialize_txs<'de, D>(deserializer: D) -> Result<Vec<Constraint>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ConstraintVisitor;
+
+        impl<'de> Visitor<'de> for ConstraintVisitor {
+            type Value = Vec<Constraint>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a sequence of transactions")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut constraints = Vec::new();
+                while let Some(tx) = seq.next_element()? {
+                    constraints.push(Constraint { tx, sender: None });
+                }
+                Ok(constraints)
+            }
+        }
+
+        deserializer.deserialize_seq(ConstraintVisitor)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]

@@ -41,6 +41,8 @@ mod utils;
 pub type BLSBytes = FixedBytes<96>;
 pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
+use interstate_commit_boost_module::keystores::Keystores;
+
 async fn handle_preconfirmation_request(
     req: PreconfRequest,
     res: Sender<PreconfResult>,
@@ -74,13 +76,15 @@ async fn handle_preconfirmation_request(
 
                 let signature = keystores.sign_commit_boost_root(digest, &pubkey);
 
-                let signed_constraints = match signature {
-                    Ok(signature) => SignedConstraints { message, signature },
-                    Err(e) => {
-                        tracing::error!(?e, "Failed to sign constraints");
-                        return;
-                    }
-                };
+                let signed_constraints = SignedConstraints { message, signature };
+
+                // let signed_constraints = match signature {
+                //     Ok(signature) => SignedConstraints { message, signature },
+                //     Err(e) => {
+                //         tracing::error!(?e, "Failed to sign constraints");
+                //         return;
+                //     }
+                // };
 
                 ApiMetrics::increment_preconfirmed_transactions_count(tx.tx.tx_type());
 
