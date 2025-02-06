@@ -1,30 +1,23 @@
-pub mod execution;
 pub mod account_state;
-pub mod fetcher;
+pub mod execution;
 pub mod execution_client;
+pub mod fetcher;
 pub mod pricing;
 pub mod signature;
 
 use std::{
-    collections::HashMap, mem, num::NonZero, pin::Pin, task::{Context, Poll}, time::{Duration, Instant}
+    collections::HashMap,
+    mem,
+    num::NonZero,
+    pin::Pin,
+    task::{Context, Poll},
+    time::{Duration, Instant},
 };
 
 use alloy::rpc::types::beacon::events::HeadEvent;
+use alloy_v092::consensus::{Signed, TxEip1559, TxEip2930, TxEip4844, TxEip7702, TxLegacy};
 use beacon_api_client::Topic;
 use beacon_api_client::{mainnet::Client, BlockId, ProposerDuty};
-use execution::ExecutionState;
-use fetcher::ClientState;
-use futures::StreamExt;
-use futures::{future::poll_fn, Future, FutureExt};
-use reth_primitives::{PooledTransactionsElement, TransactionSigned};
-use reth_primitives_v115::PooledTransaction;
-use signature::AlloySignatureWrapper;
-use tokio::time::Sleep;
-use tokio::{sync::broadcast, task::AbortHandle};
-use reth_primitives::PooledTransactionsElement::{
-    BlobTransaction, Eip1559, Eip2930, Eip7702, Legacy,
-};
-use alloy_v092::consensus::{Signed, TxEip1559, TxEip2930, TxEip4844, TxEip7702, TxLegacy};
 use ethereum_consensus::{
     crypto::PublicKey as ECBlsPublicKey,
     crypto::{KzgCommitment, KzgProof},
@@ -34,34 +27,50 @@ use ethereum_consensus::{
     },
     phase0::mainnet::SLOTS_PER_EPOCH,
 };
+use execution::ExecutionState;
+use fetcher::ClientState;
+use futures::StreamExt;
+use futures::{future::poll_fn, Future, FutureExt};
+use reth_primitives::PooledTransactionsElement::{
+    BlobTransaction, Eip1559, Eip2930, Eip7702, Legacy,
+};
+use reth_primitives::{PooledTransactionsElement, TransactionSigned};
+use reth_primitives_v115::PooledTransaction;
+use signature::AlloySignatureWrapper;
+use tokio::time::Sleep;
+use tokio::{sync::broadcast, task::AbortHandle};
 
+use crate::{
+    constraints::{SignedConstraints, TransactionExt},
+    metrics::ApiMetrics,
+};
 use tokio::time::error::Elapsed;
-use crate::{constraints::{SignedConstraints, TransactionExt}, metrics::ApiMetrics};
 
-use crate::{commitment::{inclusion::InclusionRequest, request::PreconfRequest}, utils::transactions::FullTransaction};
-use crate::config::ValidatorIndexes;
 use crate::config::ChainConfig;
+use crate::config::ValidatorIndexes;
+use crate::{
+    commitment::{inclusion::InclusionRequest, request::PreconfRequest},
+    utils::transactions::FullTransaction,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
-
-  #[error("invalid slot: {0}")]
-  InvalidSlot(u64),
-  #[error("deadline expired")]
-  DeadlineExpired,
-  #[error("no validator in slot")]
-  NoValidatorInSlot,
-  #[error("failed in fetching proposer duties from beacon")]
-  FailedFetcingProposerDuties,
-  #[error("Beacon API error: {0}")]
-  BeaconApiError(#[from] beacon_api_client::Error),
-  #[error("{0}")]
-  Custom(String),
-  #[error("Maximum retries exceeded for get_beacon_header")]
-  MaxRetriesExceeded,
-  #[error("Timeout error: {0}")]
-  Timeout(Elapsed),
-
+    #[error("invalid slot: {0}")]
+    InvalidSlot(u64),
+    #[error("deadline expired")]
+    DeadlineExpired,
+    #[error("no validator in slot")]
+    NoValidatorInSlot,
+    #[error("failed in fetching proposer duties from beacon")]
+    FailedFetcingProposerDuties,
+    #[error("Beacon API error: {0}")]
+    BeaconApiError(#[from] beacon_api_client::Error),
+    #[error("{0}")]
+    Custom(String),
+    #[error("Maximum retries exceeded for get_beacon_header")]
+    MaxRetriesExceeded,
+    #[error("Timeout error: {0}")]
+    Timeout(Elapsed),
 }
 
 #[derive(Debug, Default)]
@@ -103,7 +112,7 @@ impl ConstraintState {
         beacon_client: Client,
         validator_indexes: ValidatorIndexes,
         commitment_deadline_duration: Duration,
-        execution: ExecutionState<ClientState>
+        execution: ExecutionState<ClientState>,
     ) -> Self {
         Self {
             blocks: HashMap::new(),
@@ -171,8 +180,7 @@ impl ConstraintState {
         if request.chain_id != self.config.id {
             return Err(StateError::Custom(format!(
                 "Invalid chain ID: expected {}, got {:?}",
-                self.config.id,
-                request.chain_id
+                self.config.id, request.chain_id
             )));
         }
 
@@ -267,115 +275,127 @@ impl ConstraintState {
                     signature,
                     hash,
                 } => {
-                    full_tx = FullTransaction::from(PooledTransaction::Legacy(Signed::new_unchecked(
-                        TxLegacy {
-                            chain_id: transaction.chain_id,
-                            nonce: transaction.nonce,
-                            gas_price: transaction.gas_price,
-                            gas_limit: transaction.gas_limit,
-                            to: transaction.to,
-                            value: transaction.value,
-                            input: transaction.input,
-                        },
-                        signature,
-                        hash,
-                    )))
+                    full_tx =
+                        FullTransaction::from(PooledTransaction::Legacy(Signed::new_unchecked(
+                            TxLegacy {
+                                chain_id: transaction.chain_id,
+                                nonce: transaction.nonce,
+                                gas_price: transaction.gas_price,
+                                gas_limit: transaction.gas_limit,
+                                to: transaction.to,
+                                value: transaction.value,
+                                input: transaction.input,
+                            },
+                            signature,
+                            hash,
+                        )))
                 }
                 Eip2930 {
                     transaction,
                     signature,
                     hash,
                 } => {
-                    full_tx = FullTransaction::from(PooledTransaction::Eip2930(Signed::new_unchecked(
-                        TxEip2930 {
-                            chain_id: transaction.chain_id,
-                            nonce: transaction.nonce,
-                            gas_price: transaction.gas_price,
-                            gas_limit: transaction.gas_limit,
-                            to: transaction.to,
-                            value: transaction.value,
-                            input: transaction.input,
-                            access_list: transaction.access_list,
-                        },
-                        signature,
-                        hash,
-                    )))
+                    full_tx =
+                        FullTransaction::from(PooledTransaction::Eip2930(Signed::new_unchecked(
+                            TxEip2930 {
+                                chain_id: transaction.chain_id,
+                                nonce: transaction.nonce,
+                                gas_price: transaction.gas_price,
+                                gas_limit: transaction.gas_limit,
+                                to: transaction.to,
+                                value: transaction.value,
+                                input: transaction.input,
+                                access_list: transaction.access_list,
+                            },
+                            signature,
+                            hash,
+                        )))
                 }
                 Eip1559 {
                     transaction,
                     signature,
                     hash,
                 } => {
-                    full_tx = FullTransaction::from(PooledTransaction::Eip1559(Signed::new_unchecked(
-                        TxEip1559 {
-                            chain_id: transaction.chain_id,
-                            nonce: transaction.nonce,
-                            gas_limit: transaction.gas_limit,
-                            to: transaction.to,
-                            value: transaction.value,
-                            input: transaction.input,
-                            access_list: transaction.access_list,
-                            max_fee_per_gas: transaction.max_fee_per_gas,
-                            max_priority_fee_per_gas: transaction.max_priority_fee_per_gas,
-                        },
-                        signature,
-                        hash,
-                    )))
+                    full_tx =
+                        FullTransaction::from(PooledTransaction::Eip1559(Signed::new_unchecked(
+                            TxEip1559 {
+                                chain_id: transaction.chain_id,
+                                nonce: transaction.nonce,
+                                gas_limit: transaction.gas_limit,
+                                to: transaction.to,
+                                value: transaction.value,
+                                input: transaction.input,
+                                access_list: transaction.access_list,
+                                max_fee_per_gas: transaction.max_fee_per_gas,
+                                max_priority_fee_per_gas: transaction.max_priority_fee_per_gas,
+                            },
+                            signature,
+                            hash,
+                        )))
                 }
                 Eip7702 {
                     transaction,
                     signature,
                     hash,
                 } => {
-                    let authorization_list = unsafe { mem::transmute(transaction.authorization_list) };
-                    full_tx = FullTransaction::from(PooledTransaction::Eip7702(Signed::new_unchecked(
-                        TxEip7702 {
-                            chain_id: transaction.chain_id,
-                            nonce: transaction.nonce,
-                            gas_limit: transaction.gas_limit,
-                            to: transaction.to,
-                            value: transaction.value,
-                            input: transaction.input,
-                            access_list: transaction.access_list,
-                            max_fee_per_gas: transaction.max_fee_per_gas,
-                            max_priority_fee_per_gas: transaction.max_priority_fee_per_gas,
-                            authorization_list: authorization_list,
-                        },
-                        signature,
-                        hash,
-                    )))
+                    let authorization_list =
+                        unsafe { mem::transmute(transaction.authorization_list) };
+                    full_tx =
+                        FullTransaction::from(PooledTransaction::Eip7702(Signed::new_unchecked(
+                            TxEip7702 {
+                                chain_id: transaction.chain_id,
+                                nonce: transaction.nonce,
+                                gas_limit: transaction.gas_limit,
+                                to: transaction.to,
+                                value: transaction.value,
+                                input: transaction.input,
+                                access_list: transaction.access_list,
+                                max_fee_per_gas: transaction.max_fee_per_gas,
+                                max_priority_fee_per_gas: transaction.max_priority_fee_per_gas,
+                                authorization_list: authorization_list,
+                            },
+                            signature,
+                            hash,
+                        )))
                 }
                 BlobTransaction(blob_transaction) => {
-                    full_tx = FullTransaction::from(PooledTransaction::Eip4844(Signed::new_unchecked(
-                        alloy_v092::consensus::TxEip4844WithSidecar {
-                            tx: TxEip4844 {
-                                chain_id: blob_transaction.transaction.tx.chain_id,
-                                nonce: blob_transaction.transaction.tx.nonce,
-                                gas_limit: blob_transaction.transaction.tx.gas_limit,
-                                max_fee_per_gas: blob_transaction.transaction.tx.max_fee_per_gas,
-                                max_priority_fee_per_gas: blob_transaction
-                                    .transaction
-                                    .tx
-                                    .max_priority_fee_per_gas,
-                                to: blob_transaction.transaction.tx.to,
-                                value: blob_transaction.transaction.tx.value,
-                                access_list: blob_transaction.transaction.tx.access_list,
-                                blob_versioned_hashes: blob_transaction
-                                    .transaction
-                                    .tx
-                                    .blob_versioned_hashes,
-                                max_fee_per_blob_gas: blob_transaction.transaction.tx.max_fee_per_blob_gas,
-                                input: blob_transaction.transaction.tx.input,
+                    full_tx =
+                        FullTransaction::from(PooledTransaction::Eip4844(Signed::new_unchecked(
+                            alloy_v092::consensus::TxEip4844WithSidecar {
+                                tx: TxEip4844 {
+                                    chain_id: blob_transaction.transaction.tx.chain_id,
+                                    nonce: blob_transaction.transaction.tx.nonce,
+                                    gas_limit: blob_transaction.transaction.tx.gas_limit,
+                                    max_fee_per_gas: blob_transaction
+                                        .transaction
+                                        .tx
+                                        .max_fee_per_gas,
+                                    max_priority_fee_per_gas: blob_transaction
+                                        .transaction
+                                        .tx
+                                        .max_priority_fee_per_gas,
+                                    to: blob_transaction.transaction.tx.to,
+                                    value: blob_transaction.transaction.tx.value,
+                                    access_list: blob_transaction.transaction.tx.access_list,
+                                    blob_versioned_hashes: blob_transaction
+                                        .transaction
+                                        .tx
+                                        .blob_versioned_hashes,
+                                    max_fee_per_blob_gas: blob_transaction
+                                        .transaction
+                                        .tx
+                                        .max_fee_per_blob_gas,
+                                    input: blob_transaction.transaction.tx.input,
+                                },
+                                sidecar: alloy_v092::consensus::BlobTransactionSidecar {
+                                    blobs: blob_transaction.transaction.sidecar.blobs,
+                                    commitments: blob_transaction.transaction.sidecar.commitments,
+                                    proofs: blob_transaction.transaction.sidecar.proofs,
+                                },
                             },
-                            sidecar: alloy_v092::consensus::BlobTransactionSidecar {
-                                blobs: blob_transaction.transaction.sidecar.blobs,
-                                commitments: blob_transaction.transaction.sidecar.commitments,
-                                proofs: blob_transaction.transaction.sidecar.proofs,
-                            },
-                        },
-                        blob_transaction.signature,
-                        blob_transaction.hash,
-                    )))
+                            blob_transaction.signature,
+                            blob_transaction.hash,
+                        )))
                 }
             }
             txs.push(full_tx);
@@ -384,111 +404,112 @@ impl ConstraintState {
         let mut ir: InclusionRequest = InclusionRequest {
             slot: request.slot.clone(),
             txs,
-            signature: Some(AlloySignatureWrapper::try_from(request.signature.as_bytes().as_ref()).unwrap()),
+            signature: Some(
+                AlloySignatureWrapper::try_from(request.signature.as_bytes().as_ref()).unwrap(),
+            ),
             signer: Some(request.sender),
         };
-        
+
         let result = self.execution.verify_el_tx(&mut ir).await;
         match result {
-            Ok(_) => {
-                Ok(public_key)
-            }
+            Ok(_) => Ok(public_key),
             Err(err) => {
-                return Err(StateError::Custom("Execution Layer Validation Failed!".to_string()))
+                return Err(StateError::Custom(
+                    "Execution Layer Validation Failed!".to_string(),
+                ))
             }
         }
     }
 
-  fn find_validator_pubkey_for_slot(&self, slot: u64) -> Result<ECBlsPublicKey, StateError> {
-    self.current_epoch
-        .proposer_duties
-        .iter()
-        .find(|&duty| 
-            duty.slot == slot
-        )
-        .map(|duty| duty.public_key.clone())
-        .ok_or(StateError::NoValidatorInSlot)
-  }
-
-  async fn get_beacon_header_with_retry(&self, head: u64) -> Result<BeaconBlockHeader, StateError> {
-    let mut retries_remaining = MAX_RETRIES;
-    let mut backoff_millis = RETRY_BACKOFF_MILLIS;
-
-    loop {
-        let result = timeout(
-            Duration::from_secs(TIMEOUT_SECS),
-            self.beacon_client.get_beacon_header(BlockId::Slot(head)),
-        )
-        .await
-        .map_err(StateError::Timeout)?;
-
-        if let Ok(update) = result {
-            return Ok(update.header.message);
-        }
-
-        if retries_remaining == 0 {
-            return Err(StateError::MaxRetriesExceeded);
-        }
-
-        retries_remaining -= 1;
-        tokio::time::sleep(Duration::from_millis(backoff_millis)).await;
-        backoff_millis *= 2;
-    }
-}
-
-  pub async fn update_head(&mut self, head: u64) -> Result<(), StateError> {
-    self.commitment_deadline =
-        CommitmentDeadline::new(head + 1, self.deadline_duration);
-
-    self.header = self.get_beacon_header_with_retry(head).await?;
-
-    self.latest_slot_timestamp = Instant::now();
-    self.latest_slot = head;
-
-    let slot = self.header.slot;
-    ApiMetrics::set_latest_head(slot as u32);
-    let epoch = slot / SLOTS_PER_EPOCH;
-
-    self.blocks.remove(&slot);
-
-    if epoch != self.current_epoch.value {
-        self.current_epoch.value = epoch;
-        self.current_epoch.start_slot = epoch * SLOTS_PER_EPOCH;
-
-        self.fetch_proposer_duties(epoch).await?;
-
+    fn find_validator_pubkey_for_slot(&self, slot: u64) -> Result<ECBlsPublicKey, StateError> {
+        self.current_epoch
+            .proposer_duties
+            .iter()
+            .find(|&duty| duty.slot == slot)
+            .map(|duty| duty.public_key.clone())
+            .ok_or(StateError::NoValidatorInSlot)
     }
 
-    Ok(())
-  }
+    async fn get_beacon_header_with_retry(
+        &self,
+        head: u64,
+    ) -> Result<BeaconBlockHeader, StateError> {
+        let mut retries_remaining = MAX_RETRIES;
+        let mut backoff_millis = RETRY_BACKOFF_MILLIS;
 
-  async fn fetch_proposer_duties(&mut self, epoch: u64) -> Result<(), StateError> {
-      // Retry settings
-      let retry_delay = Duration::from_secs(2);
-      let max_retries = 5;
+        loop {
+            let result = timeout(
+                Duration::from_secs(TIMEOUT_SECS),
+                self.beacon_client.get_beacon_header(BlockId::Slot(head)),
+            )
+            .await
+            .map_err(StateError::Timeout)?;
 
-      let mut retries = 0;
+            if let Ok(update) = result {
+                return Ok(update.header.message);
+            }
 
-      loop {
-          match self
-              .beacon_client
-              .get_proposer_duties(epoch)
-              .await
-              .map_err(|_| StateError::FailedFetcingProposerDuties)
-          {
-              Ok(duties) => {
-                  self.current_epoch.proposer_duties = duties.1;
-                  break;
-              }
-              Err(_) if retries < max_retries => {
-                  retries += 1;
-                  tokio::time::sleep(retry_delay).await;
-              }
-              Err(err) => return Err(err),
-          };
-      }
-      Ok(())
-  }
+            if retries_remaining == 0 {
+                return Err(StateError::MaxRetriesExceeded);
+            }
+
+            retries_remaining -= 1;
+            tokio::time::sleep(Duration::from_millis(backoff_millis)).await;
+            backoff_millis *= 2;
+        }
+    }
+
+    pub async fn update_head(&mut self, head: u64) -> Result<(), StateError> {
+        self.commitment_deadline = CommitmentDeadline::new(head + 1, self.deadline_duration);
+
+        self.header = self.get_beacon_header_with_retry(head).await?;
+
+        self.latest_slot_timestamp = Instant::now();
+        self.latest_slot = head;
+
+        let slot = self.header.slot;
+        ApiMetrics::set_latest_head(slot as u32);
+        let epoch = slot / SLOTS_PER_EPOCH;
+
+        self.blocks.remove(&slot);
+
+        if epoch != self.current_epoch.value {
+            self.current_epoch.value = epoch;
+            self.current_epoch.start_slot = epoch * SLOTS_PER_EPOCH;
+
+            self.fetch_proposer_duties(epoch).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn fetch_proposer_duties(&mut self, epoch: u64) -> Result<(), StateError> {
+        // Retry settings
+        let retry_delay = Duration::from_secs(2);
+        let max_retries = 5;
+
+        let mut retries = 0;
+
+        loop {
+            match self
+                .beacon_client
+                .get_proposer_duties(epoch)
+                .await
+                .map_err(|_| StateError::FailedFetcingProposerDuties)
+            {
+                Ok(duties) => {
+                    self.current_epoch.proposer_duties = duties.1;
+                    break;
+                }
+                Err(_) if retries < max_retries => {
+                    retries += 1;
+                    tokio::time::sleep(retry_delay).await;
+                }
+                Err(err) => return Err(err),
+            };
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default, Clone)]

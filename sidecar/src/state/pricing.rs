@@ -15,20 +15,12 @@ pub enum PricingError {
     #[error("Preconfirmed gas {0} exceeds block limit {1}")]
     ExceedsBlockLimit(u64, u64),
     #[error("Insufficient remaining gas: requested {requested}, available {available}")]
-    InsufficientGas {
-        requested: u64,
-        available: u64,
-    },
+    InsufficientGas { requested: u64, available: u64 },
     #[error("Invalid gas limit: Incoming gas ({incoming_gas}) is zero")]
-    InvalidGasLimit {
-        incoming_gas: u64,
-    },
+    InvalidGasLimit { incoming_gas: u64 },
 
     #[error("Tip {tip} is too low. Minimum required priority fee is {min_priority_fee}")]
-    TipTooLow {
-        tip: u128,
-        min_priority_fee: u128,
-    },
+    TipTooLow { tip: u128, min_priority_fee: u128 },
 }
 
 impl Default for InclusionPricer {
@@ -39,7 +31,11 @@ impl Default for InclusionPricer {
 
 impl InclusionPricer {
     pub fn new(block_gas_limit: u64) -> Self {
-        Self { block_gas_limit, base_multiplier: BASE_MULTIPLIER, gas_scalar: GAS_SCALAR }
+        Self {
+            block_gas_limit,
+            base_multiplier: BASE_MULTIPLIER,
+            gas_scalar: GAS_SCALAR,
+        }
     }
 
     pub fn calculate_min_priority_fee(
@@ -51,8 +47,8 @@ impl InclusionPricer {
         let remaining_gas = self.block_gas_limit - preconfirmed_gas;
         let after_gas = remaining_gas - incoming_gas;
 
-        let fraction = (self.gas_scalar * (remaining_gas as f64) + 1.0) /
-            (self.gas_scalar * (after_gas as f64) + 1.0);
+        let fraction = (self.gas_scalar * (remaining_gas as f64) + 1.0)
+            / (self.gas_scalar * (after_gas as f64) + 1.0);
 
         let block_space_value = self.base_multiplier * fraction.ln();
 

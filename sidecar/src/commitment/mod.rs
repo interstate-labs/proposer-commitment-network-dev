@@ -1,6 +1,6 @@
-pub mod request;
 pub mod inclusion;
 pub mod misc;
+pub mod request;
 use axum::{
     debug_handler,
     extract::{Request, State},
@@ -67,7 +67,7 @@ async fn handle_preconfirmation(
                 .get("signed_contraints_list")
                 .and_then(|v| from_value::<Vec<SignedConstraints>>(v.clone()).ok()) // Deserialize safely
                 .unwrap_or_default(); // If None or error, return an empty Vec;
-            
+
             let response = PreconfResponse {
                 ok: true,
                 signed_contraints_list: signed_contraints_list,

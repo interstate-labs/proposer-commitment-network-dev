@@ -1,20 +1,23 @@
-use std::{time::Duration, str::FromStr};
 use alloy::primitives::b256;
 use ethereum_consensus::deneb::{compute_fork_data_root, Root};
+use std::{str::FromStr, time::Duration};
 /// Default slot time duration in seconds.
 pub const DEFAULT_SLOT_TIME_SECONDS: u64 = 12;
 
 /// Default commitment deadline duration.
 pub const DEFAULT_COMMITMENT_DEADLINE_MILLIS: u64 = 8_000;
 
-pub const HOLEKSY_CHAIN_ID:u64 = 17000;
-pub const KURTOSIS_CHAIN_ID:u64 = 3151908;
+pub const HOLEKSY_CHAIN_ID: u64 = 17000;
+pub const KURTOSIS_CHAIN_ID: u64 = 3151908;
 
 /// Builder domain for signing messages on Holesky, Kurtosis and Mainnet.
 /// ToDo: Add Mainnet domain
-const BUILDER_DOMAIN_MAINNET: [u8; 32] = b256!("00000001f5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a9").0;
-const BUILDER_DOMAIN_HOLESKY: [u8; 32] = b256!("000000015b83a23759c560b2d0c64576e1dcfc34ea94c4988f3e0d9f77f05387").0;
-const BUILDER_DOMAIN_KURTOSIS: [u8; 32] = b256!("000000010b41be4cdb34d183dddca5398337626dcdcfaf1720c1202d3b95f84e").0;
+const BUILDER_DOMAIN_MAINNET: [u8; 32] =
+    b256!("00000001f5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a9").0;
+const BUILDER_DOMAIN_HOLESKY: [u8; 32] =
+    b256!("000000015b83a23759c560b2d0c64576e1dcfc34ea94c4988f3e0d9f77f05387").0;
+const BUILDER_DOMAIN_KURTOSIS: [u8; 32] =
+    b256!("000000010b41be4cdb34d183dddca5398337626dcdcfaf1720c1202d3b95f84e").0;
 
 /// The domain mask for signing commit-boost messages.
 pub const COMMIT_BOOST_DOMAIN_MASK: [u8; 4] = [109, 109, 111, 67];
@@ -30,7 +33,6 @@ pub struct ChainConfig {
     pub slot_time: u64,
     /// chain id
     pub id: u64,
-
 }
 
 impl Default for ChainConfig {
@@ -39,7 +41,7 @@ impl Default for ChainConfig {
             chain: Chain::Holesky,
             commitment_deadline: DEFAULT_COMMITMENT_DEADLINE_MILLIS,
             slot_time: DEFAULT_SLOT_TIME_SECONDS,
-            id: HOLEKSY_CHAIN_ID
+            id: HOLEKSY_CHAIN_ID,
         }
     }
 }
@@ -59,14 +61,14 @@ impl Chain {
         match self {
             Chain::Mainnet => "mainnet",
             Chain::Holesky => "mainnet",
-            Chain::Kurtosis => "kurtosis"
+            Chain::Kurtosis => "kurtosis",
         }
     }
 
-    // get fork version of chain 
+    // get fork version of chain
     pub fn get_fork_version(&self) -> [u8; 4] {
         match self {
-            Chain::Mainnet => [5, 0, 0, 0],  // Dencun fork version
+            Chain::Mainnet => [5, 0, 0, 0], // Dencun fork version
             Chain::Holesky => [1, 1, 112, 0],
             Chain::Kurtosis => [16, 0, 0, 56],
         }
@@ -117,7 +119,6 @@ impl ChainConfig {
         domain[4..].copy_from_slice(&fork_data_root[..28]);
         domain
     }
-    
 }
 
 #[derive(Debug, Clone, Default)]

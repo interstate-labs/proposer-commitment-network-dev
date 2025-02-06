@@ -2,7 +2,11 @@ use alloy_v092::signers::k256::sha2::{Digest, Sha256};
 use ethereum_consensus::crypto::PublicKey as BlsPublicKey;
 use serde::{Deserialize, Serialize};
 
-use crate::{commitment::inclusion::InclusionRequest, crypto::{bls::BLSSig, SignableBLS}, utils::transactions::{deserialize_txs, serialize_txs, FullTransaction }};
+use crate::{
+    commitment::inclusion::InclusionRequest,
+    crypto::{bls::BLSSig, SignableBLS},
+    utils::transactions::{deserialize_txs, serialize_txs, FullTransaction},
+};
 
 pub type BatchedSignedConstraints = Vec<SignedConstraints>;
 
@@ -25,11 +29,21 @@ impl ConstraintsMessage {
     pub fn build(pubkey: BlsPublicKey, request: InclusionRequest) -> Self {
         let transactions = request.txs;
 
-        Self { pubkey, slot: request.slot, top: false, transactions }
+        Self {
+            pubkey,
+            slot: request.slot,
+            top: false,
+            transactions,
+        }
     }
 
     pub fn from_tx(pubkey: BlsPublicKey, slot: u64, tx: FullTransaction) -> Self {
-        Self { pubkey, slot, top: false, transactions: vec![tx] }
+        Self {
+            pubkey,
+            slot,
+            top: false,
+            transactions: vec![tx],
+        }
     }
 }
 

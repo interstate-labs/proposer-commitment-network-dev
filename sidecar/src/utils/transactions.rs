@@ -1,5 +1,8 @@
 use alloy_v092::{
-    consensus::{transaction::PooledTransaction, BlobTransactionSidecar, Signed, Transaction, TxType, Typed2718},
+    consensus::{
+        transaction::PooledTransaction, BlobTransactionSidecar, Signed, Transaction, TxType,
+        Typed2718,
+    },
     eips::eip2718::{Decodable2718, Encodable2718},
     hex,
     primitives::{Address, U256},
@@ -81,8 +84,11 @@ impl fmt::Debug for FullTransaction {
             if let Some(tx) = self.tx.as_eip4844_with_sidecar() {
                 let sidecar = tx.sidecar();
 
-                let shortened_blobs: Vec<String> =
-                    sidecar.blobs.iter().map(|blob| format!("{blob:#}")).collect();
+                let shortened_blobs: Vec<String> = sidecar
+                    .blobs
+                    .iter()
+                    .map(|blob| format!("{blob:#}"))
+                    .collect();
 
                 debug_struct
                     .field("tx", &"BlobTransaction")
@@ -219,7 +225,8 @@ pub fn max_transaction_cost(transaction: &PooledTransaction) -> U256 {
         fee_cap += eip4844.max_fee_per_blob_gas + eip4844.blob_gas() as u128;
     }
 
-    U256::from(gas_limit * fee_cap) + <PooledTransaction as TransactionExtForPooledTransaction>::value(transaction)
+    U256::from(gas_limit * fee_cap)
+        + <PooledTransaction as TransactionExtForPooledTransaction>::value(transaction)
 }
 
 pub fn validate_transaction(

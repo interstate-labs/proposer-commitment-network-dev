@@ -10,7 +10,9 @@ use futures::{stream::FuturesOrdered, StreamExt};
 use reqwest::Url;
 use tracing::error;
 
-use super::{account_state::AccountState, execution::StateUpdate, execution_client::ExecutionClient};
+use super::{
+    account_state::AccountState, execution::StateUpdate, execution_client::ExecutionClient,
+};
 
 const MAX_RETRIES: u32 = 8;
 
@@ -85,9 +87,12 @@ impl StateFetcher for ClientState {
             let nonce = batch
                 .add_call("eth_getTransactionCount", &(addr, tag))
                 .expect("Invalid parameters");
-            let balance =
-                batch.add_call("eth_getBalance", &(addr, tag)).expect("Invalid parameters");
-            let code = batch.add_call("eth_getCode", &(addr, tag)).expect("Invalid parameters");
+            let balance = batch
+                .add_call("eth_getBalance", &(addr, tag))
+                .expect("Invalid parameters");
+            let code = batch
+                .add_call("eth_getCode", &(addr, tag))
+                .expect("Invalid parameters");
 
             nonce_futs.push_back(nonce);
             balance_futs.push_back(balance);
@@ -130,7 +135,11 @@ impl StateFetcher for ClientState {
                 .and_modify(|s: &mut AccountState| {
                     s.balance = balance;
                 })
-                .or_insert(AccountState { transaction_count: 0, balance, has_code: false });
+                .or_insert(AccountState {
+                    transaction_count: 0,
+                    balance,
+                    has_code: false,
+                });
         }
 
         for (addr, code) in addresses.iter().zip(code_vec) {

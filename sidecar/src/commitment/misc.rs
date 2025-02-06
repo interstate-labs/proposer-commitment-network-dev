@@ -51,7 +51,10 @@ pub trait IntoSigned<S> {
 impl<T, S> IntoSigned<S> for T {
     #[inline]
     fn into_signed(self, signature: S) -> Signed<Self, S> {
-        Signed { inner: self, signature }
+        Signed {
+            inner: self,
+            signature,
+        }
     }
 }
 

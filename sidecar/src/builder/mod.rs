@@ -8,7 +8,10 @@ use constraint::SignedConstraints;
 use std::collections::HashMap;
 use tracing::warn;
 
-use crate::{ state::account_state::AccountState, utils::transactions::{max_transaction_cost, FullTransaction}};
+use crate::{
+    state::account_state::AccountState,
+    utils::transactions::{max_transaction_cost, FullTransaction},
+};
 #[derive(Debug, Default)]
 pub struct BlockTemplate {
     /// The state diffs per address given the list of commitments.
