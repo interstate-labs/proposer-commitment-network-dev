@@ -48,7 +48,7 @@ where P: PayloadFetcher + Send + Sync + 'static,
     .route(GET_PAYLOAD_PATH, post(ConstraintsAPIProxyServer::get_payload))
     .with_state(proxy_server);
 
-    let addr: SocketAddr = SocketAddr::from(([0,0,0,0], config.builder_port));
+    let addr: SocketAddr = SocketAddr::from(([127,0,0,1], config.builder_port));
 
     //TODO: replace a listening port as a builder
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -179,9 +179,9 @@ impl<P> ConstraintsAPIProxyServer<P> where P: PayloadFetcher + Send + Sync, {
     };
   }
 
-  async fn register_validators( State(server):State<Arc<ConstraintsAPIProxyServer<P>>>, Json(registors):Json<Vec<SignedValidatorRegistration>>) -> Result<StatusCode, CommitBoostError> {
+  async fn register_validators( State(server):State<Arc<ConstraintsAPIProxyServer<P>>>, Json(registers):Json<Vec<SignedValidatorRegistration>>) -> Result<StatusCode, CommitBoostError> {
     tracing::debug!("handling REGISTER_VALIDATORS_REQUEST");
-    server.proxier.register_validators(registors).await.map(|_| StatusCode::OK)
+    server.proxier.register_validators(registers).await.map(|_| StatusCode::OK)
   }
 
 }

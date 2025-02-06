@@ -94,6 +94,7 @@ impl BlockBuilder {
 }
 
 
+
 const MAX_RETRIES: u32 = 5;
 const RETRY_DELAY: Duration = Duration::from_secs(2);
 
@@ -127,6 +128,7 @@ async fn get_latest_block(&self) -> Result<Block, BuilderError> {
 
 
 let latest_block = self.get_latest_block().await?;
+
 
 
     let withdrawals = self.beacon_rpc_client.get_expected_withdrawals(StateId::Head, None).await?.into_iter().map(convert_withdrawal_from_consensus_to_alloy).collect::<Vec<_>>();
@@ -246,6 +248,10 @@ let latest_block = self.get_latest_block().await?;
                     hints.block_hash = None
                 }
 
+                EngineApiHint::BaseFee(fee) => {
+                    hints.base_fee = Some(fee);
+                    hints.block_hash = None
+                },
                 EngineApiHint::ValidPayload => return Ok(sealed_block),
             }
 
@@ -470,6 +476,7 @@ struct Hints {
     pub logs_bloom: Option<Bloom>,
     pub state_root: Option<B256>,
     pub block_hash: Option<B256>,
+    pub base_fee: Option<u64>,
 }
 
 /// Engine API hint values that can be fetched from the engine API
@@ -484,6 +491,7 @@ pub(crate) enum EngineApiHint {
     ReceiptsRoot(B256),
     LogsBloom(Bloom),
     ValidPayload,
+    BaseFee(u64),
 }
 
 /// Engine hinter struct that is responsible for fetching hints from the
@@ -547,7 +555,10 @@ impl EngineHinter {
             return Ok(EngineApiHint::ReceiptsRoot(B256::from_hex(hint_value)?));
         } else if raw_hint.contains("invalid bloom") {
             return Ok(EngineApiHint::LogsBloom(Bloom::from_hex(&hint_value)?));
-        };
+        } else if raw_hint.contains("invalid baseFee") {
+            return Ok(EngineApiHint::BaseFee(hint_value.parse()?))
+        }
+        ;
 
         Err(BuilderError::Custom(
             "Unexpected: failed to parse any hint from engine response".to_string(),
@@ -664,12 +675,7 @@ mod tests {
 
         let ecda_signature = signer.clone().sign_hash(&message_digest).await.unwrap();
 
-        let request = PreconfRequest {
-            signature: ecda_signature,
-            txs,
-            sender:addy,
-            slot: 42,
-        };
+        let request = PreconfRequest {signature:ecda_signature,txs,sender:addy,slot:42, chain_id: 171000 };
 
         // println!("preconf request {:#?}", request);
 

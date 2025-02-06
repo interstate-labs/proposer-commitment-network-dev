@@ -1,4 +1,4 @@
-FROM rust:1.65-slim-bullseye AS compiler 
+FROM rust:1.82.0-slim-bullseye AS compiler 
 
 RUN cargo install cargo-chef
 

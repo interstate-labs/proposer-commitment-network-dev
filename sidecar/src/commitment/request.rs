@@ -45,6 +45,16 @@ impl CommitmentRequestHandler{
       return Err(CommitmentRequestError::Custom("Invalid signature".to_string()));
     }
 
+    for tx in request.txs.iter() {
+        if !tx.validate() {
+            tracing::error!("Sender of the transaction is not a signer");
+            return Err(CommitmentRequestError::Custom(
+                "Sender of the transaction is invalid".to_owned(),
+            ));
+        }
+    }
+
+
     let (response_tx, response_rx) = oneshot::channel();
 
     let event = CommitmentRequestEvent {
