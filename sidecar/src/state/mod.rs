@@ -208,6 +208,7 @@ impl ConstraintState {
         }
 
         // Check if there is room for more commitments
+        //Includeded the number of transactions
         if let Some(block) = self.blocks.get(&request.slot) {
             if block.transactions_count() + request.txs.len() >= self.max_commitments_in_block {
                 return Err(StateError::Custom(
