@@ -239,6 +239,10 @@ impl From<PooledTransactionsElement> for Constraint {
 }
 
 impl Constraint {
+    pub fn set_sender(&mut self, sender: Option<Address>) {
+        self.sender = sender;
+    }
+
     pub fn decode_enveloped(data: impl AsRef<[u8]>) -> eyre::Result<Self> {
         let tx = PooledTransactionsElement::decode_2718(&mut data.as_ref())?;
         Ok(Self { tx, sender: None })

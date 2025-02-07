@@ -60,7 +60,9 @@ impl CommitmentRequestHandler {
         }
 
         for tx in request.txs.iter() {
-            if !tx.validate() {
+            let _tx = &mut tx.clone();
+            _tx.set_sender(Some(request.sender));
+            if !_tx.validate() {
                 tracing::error!("Sender of the transaction is not a signer");
                 return Err(CommitmentRequestError::Custom(
                     "Sender of the transaction is invalid".to_owned(),
@@ -120,10 +122,13 @@ impl PreconfRequest {
         let mut data = Vec::new();
         // Include the slot field
         data.extend_from_slice(&self.slot.to_be_bytes());
-        // Concatenation of all the transaction hashes
-        for tx in &self.txs {
-            data.extend_from_slice(tx.tx.hash().as_slice());
-        }
+        data.extend_from_slice(
+            &self.txs
+              .iter()
+              .map(|tx| tx.tx.hash().as_slice())
+              .collect::<Vec<_>>()
+              .concat(),
+        );
         keccak256(data)
     }
 
