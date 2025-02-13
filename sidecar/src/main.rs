@@ -4,6 +4,7 @@ pub use beacon_api_client::mainnet::Client;
 use commitment::request::{CommitmentRequestError, CommitmentRequestEvent};
 use metrics::{run_metrics_server, ApiMetrics};
 use state::{execution::ExecutionState, fetcher::ClientState, ConstraintState, HeadEventListener};
+use utils::send_sidecar_info;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
@@ -242,6 +243,8 @@ async fn main() {
     // };
 
     tracing::debug!("Connected to the server!");
+
+    let _ = send_sidecar_info(keystores.get_pubkeys(), config.SIDECAR_INFO_SENDER_URL, config.commitment_port).await;
 
     let constraint_state = Arc::new(Mutex::new(constraint_state));
     let commit_boost_api = Arc::new(Mutex::new(commit_boost_api));
