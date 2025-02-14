@@ -32,6 +32,8 @@ pub struct Config {
     pub collector_url: Url,
     /// The constraints collector websocket url
     pub collector_ws: String,
+    /// The router url
+    pub SIDECAR_INFO_SENDER_URL: Url,
     /// URL for the beacon client API URL
     pub beacon_api_url: Url,
     /// The execution API url
@@ -65,6 +67,7 @@ impl Default for Config {
             builder_port: DEFAULT_MEV_BOOST_PROXY_PORT,
             metrics_port: DEFAULT_METRICS_PORT,
             collector_url: "http://localhost:3030".parse().expect("Valid URL"),
+            SIDECAR_INFO_SENDER_URL: "http://localhost:8000".parse().expect("Valid URL"),
             beacon_api_url: "http://localhost:5052".parse().expect("Valid URL"),
             execution_api_url: "http://localhost:8545".parse().expect("Valid URL"),
             engine_api_url: "http://localhost:8551".parse().expect("Valid URL"),
@@ -113,6 +116,7 @@ impl Config {
             builder_port: envs["BUILDER_PORT"].parse().unwrap(),
             collector_url: envs["COLLECTOR_URL"].parse().expect("Valid URL"),
             collector_ws: envs["COLLECTOR_SOCKET"].parse().expect("Valid URL"),
+            SIDECAR_INFO_SENDER_URL: envs["SIDECAR_INFO_SENDER_URL"].parse().expect("Valid URL"),
             beacon_api_url: envs["BEACON_API_URL"].parse().expect("Valid URL"),
             execution_api_url: envs["EXECUTION_API_URL"].parse().expect("Valid URL"),
             engine_api_url: envs["ENGINE_API_URL"].parse().expect("Valid URL"),
