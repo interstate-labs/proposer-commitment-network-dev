@@ -170,6 +170,7 @@ impl ConstraintState {
     }
 
     pub fn remove_constraints_at_slot(&mut self, slot: u64) -> Option<Block> {
+        tracing::debug!("constraints block in slot {}, {:#?}", slot ,  self.blocks.get(&slot));
         self.blocks.remove(&slot)
     }
 

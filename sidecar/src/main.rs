@@ -120,7 +120,7 @@ async fn handle_commitment_deadline(
 
     tracing::info!("The commitment deadline is reached in slot {}", slot);
 
-    tracing::debug!("constraints in {} : {:#?}", slot, constraint_state.blocks);
+    tracing::debug!("constraints in {} : {:#?}", slot, constraint_state.blocks.get(&slot));
 
 
     let Some(block) = constraint_state.remove_constraints_at_slot(slot) else {
