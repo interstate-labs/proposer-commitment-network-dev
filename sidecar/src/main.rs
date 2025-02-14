@@ -65,7 +65,6 @@ async fn handle_preconfirmation_request(
                 );
                 return;
             }
-
             // TODO::Validate preconfirmation request
             let mut signed_contraints_list: Vec<SignedConstraints> = vec![];
 
@@ -120,6 +119,9 @@ async fn handle_commitment_deadline(
     let mut fallback_builder = fallback_builder.lock().await;
 
     tracing::info!("The commitment deadline is reached in slot {}", slot);
+
+    tracing::debug!("constraints in {} : {:#?}", slot, constraint_state.blocks);
+
 
     let Some(block) = constraint_state.remove_constraints_at_slot(slot) else {
         tracing::debug!("Couldn't find a block at slot {slot}");
@@ -222,6 +224,7 @@ async fn main() {
         ExecutionState::new(client_state, LimitOptions::default(), DEFAULT_GAS_LIMIT)
             .await
             .expect("Failed to create Execution State"),
+        &config.chain            
     );
 
     let mut head_event_listener = HeadEventListener::run(beacon_client);
@@ -257,6 +260,7 @@ async fn main() {
         // this will be unlocked after the second tokio::select slot is finished.
         tokio::select! {
             Some( CommitmentRequestEvent{req, res} ) = receiver.recv() => {
+                tracing::info!("received preconf request");
                 tokio::spawn(
                     handle_preconfirmation_request(req, res, keystores.clone(), constraint_state.clone())
                 );

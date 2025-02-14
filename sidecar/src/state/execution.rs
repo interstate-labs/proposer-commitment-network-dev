@@ -316,7 +316,6 @@ impl<C: StateFetcher> ExecutionState<C> {
 
                 has_code: account_state.has_code,
             };
-
             validate_transaction(&account_state_with_diffs, tx)?;
 
             if let Some(transaction) = tx.as_eip4844_with_sidecar() {

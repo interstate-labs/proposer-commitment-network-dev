@@ -43,6 +43,8 @@ impl CommitmentRequestHandler {
 
     pub async fn handle_commitment_request(&self, request: &PreconfRequest) -> PreconfResult {
         let digest = request.digest();
+        tracing::debug!("digest: {}", digest);
+
         let recovered_signer = request
             .signature
             .recover_address_from_prehash(&digest)
@@ -51,6 +53,7 @@ impl CommitmentRequestHandler {
                     "Failed to recover signer from request signature".to_string(),
                 )
             })?;
+        tracing::debug!("{}:{}", recovered_signer, request.sender);
 
         if recovered_signer != request.sender {
             tracing::error!("Signer is a not a sender");
@@ -60,7 +63,7 @@ impl CommitmentRequestHandler {
         }
 
         for tx in request.txs.iter() {
-            if !tx.validate() {
+            if !tx.validate(request.sender) {
                 tracing::error!("Sender of the transaction is not a signer");
                 return Err(CommitmentRequestError::Custom(
                     "Sender of the transaction is invalid".to_owned(),
@@ -124,6 +127,7 @@ impl PreconfRequest {
         for tx in &self.txs {
             data.extend_from_slice(tx.tx.hash().as_slice());
         }
+
         keccak256(data)
     }
 

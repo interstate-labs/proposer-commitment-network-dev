@@ -113,6 +113,7 @@ impl ConstraintState {
         validator_indexes: ValidatorIndexes,
         commitment_deadline_duration: Duration,
         execution: ExecutionState<ClientState>,
+        config: &ChainConfig,
     ) -> Self {
         Self {
             blocks: HashMap::new(),
@@ -131,7 +132,7 @@ impl ConstraintState {
             block_gas_limit: 30_000_000,
             max_tx_input_bytes: 4 * 32 * 1024,
             max_init_code_byte_size: 2 * 24576,
-            config: Default::default(),
+            config: config.clone(),
         }
     }
 
@@ -188,6 +189,7 @@ impl ConstraintState {
         if request.slot < self.current_epoch.start_slot
             || request.slot >= self.current_epoch.start_slot + SLOTS_PER_EPOCH
         {
+            tracing::debug!("slots data: {},{}",request.slot,self.current_epoch.start_slot);
             return Err(StateError::InvalidSlot(request.slot));
         }
 
