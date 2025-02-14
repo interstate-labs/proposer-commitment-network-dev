@@ -8,11 +8,12 @@ use alloy_v092::{
     primitives::{Address, U256},
 };
 
+use reth_primitives::PooledTransactionsElement;
 use reth_primitives_v115::TransactionSigned;
 use serde::{de, ser::SerializeSeq};
 use std::{borrow::Cow, fmt};
 
-use crate::state::{account_state::AccountState, execution::ValidationError};
+use crate::{constraints::TransactionExt, state::{account_state::AccountState, execution::ValidationError}};
 /// Trait that exposes additional information on transaction types that don't already do it
 /// by themselves (e.g. [`PooledTransaction`]).
 pub trait TransactionExtForPooledTransaction {
@@ -215,7 +216,7 @@ pub fn calculate_max_basefee(current: u128, block_diff: u64) -> Option<u128> {
     Some(max_basefee)
 }
 
-pub fn max_transaction_cost(transaction: &PooledTransaction) -> U256 {
+pub fn max_transaction_cost(transaction: &PooledTransactionsElement) -> U256 {
     let gas_limit = transaction.gas_limit() as u128;
 
     let mut fee_cap = transaction.max_fee_per_gas();
@@ -226,12 +227,12 @@ pub fn max_transaction_cost(transaction: &PooledTransaction) -> U256 {
     }
 
     U256::from(gas_limit * fee_cap)
-        + <PooledTransaction as TransactionExtForPooledTransaction>::value(transaction)
+        + transaction.value()
 }
 
 pub fn validate_transaction(
     account_state: &AccountState,
-    transaction: &PooledTransaction,
+    transaction: &PooledTransactionsElement,
 ) -> Result<(), ValidationError> {
     if transaction.nonce() < account_state.transaction_count {
         return Err(ValidationError::NonceTooLow(

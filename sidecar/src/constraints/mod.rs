@@ -270,6 +270,7 @@ impl Constraint {
             _ => false,
         }
     }
+
 }
 
 #[derive(Debug, Clone)]

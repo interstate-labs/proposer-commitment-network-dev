@@ -1,5 +1,6 @@
+use alloy::consensus::Transaction;
 use alloy_v092::{
-    consensus::{BlobTransactionValidationError, EnvKzgSettings, Transaction},
+    consensus::{BlobTransactionValidationError, EnvKzgSettings},
     eips::eip4844::MAX_BLOBS_PER_BLOCK,
     primitives::{Address, U256},
     transports::TransportError,
@@ -11,20 +12,16 @@ use thiserror::Error;
 use tracing::{debug, error, info, trace, warn};
 
 use crate::{
-    builder::BlockTemplate,
-    commitment::inclusion::InclusionRequest,
-    config::limits::LimitOptions,
-    metrics::ApiMetrics,
-    utils::{
+    builder::BlockTemplate, commitment::request::PreconfRequest, config::limits::LimitOptions, constraints::TransactionExt, metrics::ApiMetrics, utils::{
         score_cache::ScoreCache,
         transactions::{calculate_max_basefee, max_transaction_cost, validate_transaction},
-    },
+    }
 };
 
 use super::{
     account_state::{AccountState, AccountStateCache},
     fetcher::StateFetcher,
-    pricing::{self, InclusionPricer},
+    pricing::{self, PreconfPricer},
     signature::SignatureError,
 };
 
@@ -119,7 +116,7 @@ pub struct ExecutionState<C> {
     kzg_settings: EnvKzgSettings,
     client: C,
     validation_params: ValidationParams,
-    pricing: InclusionPricer,
+    pricing: PreconfPricer,
 }
 
 #[derive(Debug)]
@@ -169,7 +166,7 @@ impl<C: StateFetcher> ExecutionState<C> {
             block_templates: HashMap::new(),
             kzg_settings: EnvKzgSettings::default(),
             validation_params: ValidationParams::new(gas_limit),
-            pricing: InclusionPricer::new(gas_limit),
+            pricing: PreconfPricer::new(gas_limit),
         })
     }
 
@@ -179,9 +176,9 @@ impl<C: StateFetcher> ExecutionState<C> {
 
     pub async fn verify_el_tx(
         &mut self,
-        req: &mut InclusionRequest,
+        req: &mut PreconfRequest,
     ) -> Result<(), ValidationError> {
-        req.recover_signers()?;
+        req.recover_signers();
 
         let target_slot = req.slot;
 
@@ -264,20 +261,20 @@ impl<C: StateFetcher> ExecutionState<C> {
         let mut bundle_nonce_diff_map = HashMap::new();
         let mut bundle_balance_diff_map = HashMap::new();
         for tx in &req.txs {
-            let sender = tx.sender().expect("Recovered sender");
+            let sender = tx.sender.expect("Recovered sender");
 
             let (nonce_diff, balance_diff, highest_slot_for_account) =
-                compute_diffs(&self.block_templates, sender);
+                compute_diffs(&self.block_templates, &sender);
 
             if target_slot < highest_slot_for_account {
                 debug!(%target_slot, %highest_slot_for_account, "There is a request for a higher slot");
                 return Err(ValidationError::SlotTooLow(highest_slot_for_account));
             }
 
-            let account_state = match self.account_states.get(sender).copied() {
+            let account_state = match self.account_states.get(&sender).copied() {
                 Some(account) => account,
                 None => {
-                    let account = match self.client.get_account_state(sender, None).await {
+                    let account = match self.client.get_account_state(&sender, None).await {
                         Ok(account) => account,
                         Err(err) => {
                             return Err(ValidationError::Internal(format!(
@@ -287,7 +284,7 @@ impl<C: StateFetcher> ExecutionState<C> {
                         }
                     };
 
-                    self.account_states.insert(*sender, account);
+                    self.account_states.insert(sender, account);
                     account
                 }
             };
@@ -317,9 +314,9 @@ impl<C: StateFetcher> ExecutionState<C> {
                 has_code: account_state.has_code,
             };
 
-            validate_transaction(&account_state_with_diffs, tx)?;
+            validate_transaction(&account_state_with_diffs, &tx.tx)?;
 
-            if let Some(transaction) = tx.as_eip4844_with_sidecar() {
+            if let Some(transaction) = tx.tx.as_eip4844() {
                 if let Some(template) = self.block_templates.get(&target_slot) {
                     if template.blob_count() >= MAX_BLOBS_PER_BLOCK {
                         return Err(ValidationError::Eip4844Limit);
@@ -336,11 +333,12 @@ impl<C: StateFetcher> ExecutionState<C> {
                     return Err(ValidationError::BlobBaseFeeTooLow(max_blob_basefee));
                 }
 
-                transaction.validate_blob(self.kzg_settings.get())?;
+                let sidecar = tx.tx.blob_sidecar().expect("Expect Sidecar");
+                transaction.validate_blob(sidecar, self.kzg_settings.get());
             }
 
             *sender_nonce_diff += 1;
-            *sender_balance_diff += max_transaction_cost(tx);
+            *sender_balance_diff += max_transaction_cost(&tx.tx);
         }
 
         // debug!("before okay!");

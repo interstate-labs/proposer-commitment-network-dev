@@ -9,8 +9,7 @@ use std::collections::HashMap;
 use tracing::warn;
 
 use crate::{
-    state::account_state::AccountState,
-    utils::transactions::{max_transaction_cost, FullTransaction},
+    constraints::{Constraint, TransactionExt}, state::account_state::AccountState, utils::transactions::{max_transaction_cost, FullTransaction}
 };
 #[derive(Debug, Default)]
 pub struct BlockTemplate {
@@ -29,7 +28,7 @@ impl BlockTemplate {
     pub fn transaction_hashes(&self) -> Vec<TxHash> {
         self.signed_constraints_list
             .iter()
-            .flat_map(|sc| sc.message.transactions.iter().map(|c| *c.hash()))
+            .flat_map(|sc| sc.message.transactions.iter().map(|c| *c.tx.hash()))
             .collect()
     }
 
@@ -40,7 +39,7 @@ impl BlockTemplate {
                 .message
                 .transactions
                 .iter()
-                .fold(0, |acc, c| acc + c.gas_limit())
+                .fold(0, |acc, c| acc + c.tx.gas_limit())
         })
     }
 
@@ -49,7 +48,7 @@ impl BlockTemplate {
         self.signed_constraints_list.iter().fold(0, |mut acc, sc| {
             acc += sc.message.transactions.iter().fold(0, |acc, c| {
                 acc + c
-                    .as_eip4844()
+                    .tx.as_eip4844()
                     .map(|tx| tx.blob_versioned_hashes.len())
                     .unwrap_or(0)
             });
@@ -64,10 +63,10 @@ impl BlockTemplate {
         for constraint in &constraints.message.transactions {
             self.state_diff
                 .diffs
-                .entry(*constraint.sender().expect("recovered sender"))
+                .entry(constraint.sender.expect("recovered sender"))
                 .and_modify(|(nonce, balance)| {
                     *nonce = nonce.saturating_sub(1);
-                    *balance -= max_transaction_cost(constraint);
+                    *balance -= max_transaction_cost(&constraint.tx);
                 });
         }
     }
@@ -75,20 +74,20 @@ impl BlockTemplate {
     pub fn retain(&mut self, address: Address, state: AccountState) {
         let mut indexes: Vec<usize> = Vec::new();
 
-        let constraints_with_address: Vec<(usize, Vec<&FullTransaction>)> = self
+        let constraints_with_address: Vec<(usize, Vec<&Constraint>)> = self
             .signed_constraints_list
             .iter()
             .enumerate()
             .map(|(idx, c)| (idx, &c.message.transactions))
             .filter(|(_idx, c)| {
                 c.iter()
-                    .any(|c| c.sender().expect("recovered sender") == &address)
+                    .any(|c| c.sender.expect("recovered sender") == address)
             })
             .map(|(idx, c)| {
                 (
                     idx,
                     c.iter()
-                        .filter(|c| c.sender().expect("recovered sender") == &address)
+                        .filter(|c| c.sender.expect("recovered sender") == address)
                         .collect(),
                 )
             })
@@ -99,8 +98,8 @@ impl BlockTemplate {
             .flat_map(|c| c.1.clone())
             .fold((U256::ZERO, u64::MAX), |(total_cost, min_nonce), c| {
                 (
-                    total_cost + max_transaction_cost(c),
-                    min_nonce.min(c.nonce()),
+                    total_cost + max_transaction_cost(&c.tx),
+                    min_nonce.min(c.tx.nonce()),
                 )
             });
 
