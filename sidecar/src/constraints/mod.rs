@@ -8,7 +8,7 @@ use alloy::{
     eips::eip2718::{Decodable2718, Encodable2718},
     hex,
     primitives::{Address, Bytes, FixedBytes, TxKind, U256},
-    signers::k256::sha2::{Digest, Sha256},
+    signers::k256::{sha2::{Digest, Sha256}, PublicKey},
 };
 use builder::{GetHeaderParams, GetPayloadResponse, SignedBuilderBid};
 use tokio::time::{timeout, Duration};
@@ -262,11 +262,10 @@ impl Constraint {
         }
     }
 
-    pub fn validate(&self) -> bool {
+    pub fn validate(&self, sender: Address) -> bool {
         let recovered = self.tx.recover_signer();
-
-        match (self.sender, recovered) {
-            (Some(sender), Some(recovered)) if sender == recovered => true,
+        match (sender, recovered ) {
+            (sender, Some(recovered)) if sender == recovered => true,
             _ => false,
         }
     }
