@@ -117,25 +117,13 @@ where
             beacon_api_url,
         }
     }
-
-    fn is_ip_in_url(beacon_api_url: &Url, my_socket_addr: SocketAddr) -> bool {
-        let my_ip = my_socket_addr.ip(); // Extract only the IP from SocketAddr
-    
-        match beacon_api_url.host() {
-            Some(url::Host::Ipv4(ip)) => ip == my_ip,
-            Some(url::Host::Ipv6(ip)) => ip == my_ip,
-            _ => false, // URL has a domain name, not an IP
-        }
-    }
     
     async fn status(
         ConnectInfo(addr): ConnectInfo<SocketAddr>,
         State(server): State<Arc<ConstraintsAPIProxyServer<P>>>,
     ) -> StatusCode {
         tracing::debug!(?addr, "handling STATUS request");
-        if Self::is_ip_in_url(&server.beacon_api_url, addr) == false {
-            return StatusCode::UNAUTHORIZED
-        }
+
         let status = match server.proxier.status().await {
             Ok(status) => status,
             Err(err) => {
@@ -152,9 +140,7 @@ where
         Path(params): Path<GetHeaderParams>,
     ) -> Result<Json<VersionedValue<SignedBuilderBid>>, CommitBoostError> {
         tracing::debug!("handling GET_HEADER request");
-        if Self::is_ip_in_url(&server.beacon_api_url, addr) == false {
-            return Err(CommitBoostError::Unauthorized("".to_string()));
-        }
+
         let slot = params.slot;
         match tokio::time::timeout(
             GET_HEADER_WITH_PROOFS_TIMEOUT,
@@ -220,9 +206,7 @@ where
         req: Request<Body>,
     ) -> Result<Json<GetPayloadResponse>, CommitBoostError> {
         tracing::debug!("handling GET_PAYLOAD request");
-        if Self::is_ip_in_url(&server.beacon_api_url, addr) == false {
-            return Err(CommitBoostError::Unauthorized("".to_string()));
-        }
+
         let body_bytes = body::to_bytes(req.into_body(), MAX_BLINDED_BLOCK_LENGTH)
             .await
             .map_err(|e| {
@@ -278,9 +262,7 @@ where
         Json(registers): Json<Vec<SignedValidatorRegistration>>,
     ) -> Result<StatusCode, CommitBoostError> {
         tracing::debug!("handling REGISTER_VALIDATORS_REQUEST");
-        if Self::is_ip_in_url(&server.beacon_api_url, addr) == false {
-            return Err(CommitBoostError::Unauthorized("".to_string()));
-        }
+
         server
             .proxier
             .register_validators(registers)
