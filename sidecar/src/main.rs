@@ -244,7 +244,7 @@ async fn main() {
 
     tracing::debug!("Connected to the server!");
 
-    let _ = send_sidecar_info(keystores.get_pubkeys(), config.SIDECAR_INFO_SENDER_URL, config.commitment_port).await;
+    let _ = send_sidecar_info(keystores.get_pubkeys(), config.sidecar_info_sender_url, config.commitment_port).await;
 
     let constraint_state = Arc::new(Mutex::new(constraint_state));
     let commit_boost_api = Arc::new(Mutex::new(commit_boost_api));
