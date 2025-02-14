@@ -1,7 +1,8 @@
 use alloy::{
     hex,
-    primitives::{keccak256, Address, PrimitiveSignature, B256},
+    primitives::{keccak256, Address, PrimitiveSignature, SignatureError, B256},
 };
+
 use parking_lot::RwLock;
 use reqwest::Url;
 use serde::{de, Deserialize, Deserializer, Serialize};
@@ -10,7 +11,7 @@ use std::{num::NonZeroUsize, str::FromStr, sync::Arc};
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::constraints::{deserialize_txs, serialize_txs, Constraint, TransactionExt};
+use crate::{constraints::{deserialize_txs, serialize_txs, Constraint, TransactionExt}, state::pricing::{PreconfPricer, PricingError}};
 use crate::onchain::gateway::GatewayController;
 
 #[derive(Debug)]
@@ -163,6 +164,72 @@ impl PreconfRequest {
         for c in &self.txs {
             if c.tx.max_priority_fee_per_gas() > Some(c.tx.max_fee_per_gas()) {
                 return false;
+            }
+        }
+
+        true
+    }
+
+    /// Validates the transaction fees against a minimum basefee.
+    /// Returns true if the fee is greater than or equal to the min, false otherwise.
+    pub fn validate_basefee(&self, min: u128) -> bool {
+        for tx in &self.txs {
+            if tx.tx.max_fee_per_gas() < min {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    pub fn recover_signers(&mut self) -> Result<(), SignatureError> {
+        for tx in &mut self.txs {
+            let signer = tx.tx.recover_signer().unwrap_or_default();
+            tx.sender = Some(signer);
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_min_priority_fee(
+        &self,
+        pricing: &PreconfPricer,
+        preconfirmed_gas: u64,
+        min_inclusion_profit: u64,
+        max_base_fee: u128,
+    ) -> Result<bool, PricingError> {
+        // Each included tx will move the price up
+        // So we need to calculate the minimum priority fee for each tx
+        let mut local_preconfirmed_gas = preconfirmed_gas;
+        for tx in &self.txs {
+            // Calculate minimum required priority fee for this transaction
+            let min_priority_fee = pricing
+                .calculate_min_priority_fee(tx.tx.gas_limit(), preconfirmed_gas)? +
+                min_inclusion_profit;
+
+            let tip = tx.effective_tip_per_gas(max_base_fee).unwrap_or_default();
+            if tip < min_priority_fee as u128 {
+                return Err(PricingError::TipTooLow {
+                    tip,
+                    min_priority_fee: min_priority_fee as u128,
+                });
+            }
+            // Increment the preconfirmed gas for the next transaction in the bundle
+            local_preconfirmed_gas = local_preconfirmed_gas.saturating_add(tx.tx.gas_limit());
+        }
+        Ok(true)
+    }
+
+    /// Validates the transaction chain id against the provided chain id.
+    /// Returns true if the chain id matches, false otherwise. Will always return true
+    /// for pre-EIP155 transactions.
+    pub fn validate_chain_id(&self, chain_id: u64) -> bool {
+        for tx in &self.txs {
+            // Check if pre-EIP155 transaction
+            if let Some(id) = tx.tx.chain_id() {
+                if id != chain_id {
+                    return false;
+                }
             }
         }
 
