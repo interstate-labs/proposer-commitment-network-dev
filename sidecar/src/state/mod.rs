@@ -49,7 +49,7 @@ use tokio::time::error::Elapsed;
 use crate::config::ChainConfig;
 use crate::config::ValidatorIndexes;
 use crate::{
-    commitment::{inclusion::InclusionRequest, request::PreconfRequest},
+    commitment::request::PreconfRequest,
     utils::transactions::FullTransaction,
 };
 
@@ -176,7 +176,7 @@ impl ConstraintState {
 
     pub async fn validate_preconf_request(
         &mut self,
-        request: &PreconfRequest,
+        mut request: PreconfRequest,
     ) -> Result<ECBlsPublicKey, StateError> {
         // Check if the chain is eth mainnet
         if request.chain_id != self.config.id {
@@ -268,152 +268,7 @@ impl ConstraintState {
         }
 
         // // Execution Layer Validation
-        let mut txs: Vec<FullTransaction> = vec![];
-        for tx in request.txs.clone() {
-            let pooled_tx = tx.tx;
-            let full_tx: FullTransaction;
-            match pooled_tx {
-                Legacy {
-                    transaction,
-                    signature,
-                    hash,
-                } => {
-                    full_tx =
-                        FullTransaction::from(PooledTransaction::Legacy(Signed::new_unchecked(
-                            TxLegacy {
-                                chain_id: transaction.chain_id,
-                                nonce: transaction.nonce,
-                                gas_price: transaction.gas_price,
-                                gas_limit: transaction.gas_limit,
-                                to: transaction.to,
-                                value: transaction.value,
-                                input: transaction.input,
-                            },
-                            signature,
-                            hash,
-                        )))
-                }
-                Eip2930 {
-                    transaction,
-                    signature,
-                    hash,
-                } => {
-                    full_tx =
-                        FullTransaction::from(PooledTransaction::Eip2930(Signed::new_unchecked(
-                            TxEip2930 {
-                                chain_id: transaction.chain_id,
-                                nonce: transaction.nonce,
-                                gas_price: transaction.gas_price,
-                                gas_limit: transaction.gas_limit,
-                                to: transaction.to,
-                                value: transaction.value,
-                                input: transaction.input,
-                                access_list: transaction.access_list,
-                            },
-                            signature,
-                            hash,
-                        )))
-                }
-                Eip1559 {
-                    transaction,
-                    signature,
-                    hash,
-                } => {
-                    full_tx =
-                        FullTransaction::from(PooledTransaction::Eip1559(Signed::new_unchecked(
-                            TxEip1559 {
-                                chain_id: transaction.chain_id,
-                                nonce: transaction.nonce,
-                                gas_limit: transaction.gas_limit,
-                                to: transaction.to,
-                                value: transaction.value,
-                                input: transaction.input,
-                                access_list: transaction.access_list,
-                                max_fee_per_gas: transaction.max_fee_per_gas,
-                                max_priority_fee_per_gas: transaction.max_priority_fee_per_gas,
-                            },
-                            signature,
-                            hash,
-                        )))
-                }
-                Eip7702 {
-                    transaction,
-                    signature,
-                    hash,
-                } => {
-                    let authorization_list =
-                        unsafe { mem::transmute(transaction.authorization_list) };
-                    full_tx =
-                        FullTransaction::from(PooledTransaction::Eip7702(Signed::new_unchecked(
-                            TxEip7702 {
-                                chain_id: transaction.chain_id,
-                                nonce: transaction.nonce,
-                                gas_limit: transaction.gas_limit,
-                                to: transaction.to,
-                                value: transaction.value,
-                                input: transaction.input,
-                                access_list: transaction.access_list,
-                                max_fee_per_gas: transaction.max_fee_per_gas,
-                                max_priority_fee_per_gas: transaction.max_priority_fee_per_gas,
-                                authorization_list: authorization_list,
-                            },
-                            signature,
-                            hash,
-                        )))
-                }
-                BlobTransaction(blob_transaction) => {
-                    full_tx =
-                        FullTransaction::from(PooledTransaction::Eip4844(Signed::new_unchecked(
-                            alloy_v092::consensus::TxEip4844WithSidecar {
-                                tx: TxEip4844 {
-                                    chain_id: blob_transaction.transaction.tx.chain_id,
-                                    nonce: blob_transaction.transaction.tx.nonce,
-                                    gas_limit: blob_transaction.transaction.tx.gas_limit,
-                                    max_fee_per_gas: blob_transaction
-                                        .transaction
-                                        .tx
-                                        .max_fee_per_gas,
-                                    max_priority_fee_per_gas: blob_transaction
-                                        .transaction
-                                        .tx
-                                        .max_priority_fee_per_gas,
-                                    to: blob_transaction.transaction.tx.to,
-                                    value: blob_transaction.transaction.tx.value,
-                                    access_list: blob_transaction.transaction.tx.access_list,
-                                    blob_versioned_hashes: blob_transaction
-                                        .transaction
-                                        .tx
-                                        .blob_versioned_hashes,
-                                    max_fee_per_blob_gas: blob_transaction
-                                        .transaction
-                                        .tx
-                                        .max_fee_per_blob_gas,
-                                    input: blob_transaction.transaction.tx.input,
-                                },
-                                sidecar: alloy_v092::consensus::BlobTransactionSidecar {
-                                    blobs: blob_transaction.transaction.sidecar.blobs,
-                                    commitments: blob_transaction.transaction.sidecar.commitments,
-                                    proofs: blob_transaction.transaction.sidecar.proofs,
-                                },
-                            },
-                            blob_transaction.signature,
-                            blob_transaction.hash,
-                        )))
-                }
-            }
-            txs.push(full_tx);
-        }
-
-        let mut ir: InclusionRequest = InclusionRequest {
-            slot: request.slot.clone(),
-            txs,
-            signature: Some(
-                AlloySignatureWrapper::try_from(request.signature.as_bytes().as_ref()).unwrap(),
-            ),
-            signer: Some(request.sender),
-        };
-
-        let result = self.execution.verify_el_tx(&mut ir).await;
+        let result = self.execution.verify_el_tx(&mut request).await;
         match result {
             Ok(_) => Ok(public_key),
             Err(err) => {

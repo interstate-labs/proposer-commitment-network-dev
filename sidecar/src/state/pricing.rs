@@ -4,7 +4,7 @@ const BASE_MULTIPLIER: f64 = 0.019;
 const GAS_SCALAR: f64 = 1.02e-6;
 
 #[derive(Debug)]
-pub struct InclusionPricer {
+pub struct PreconfPricer {
     block_gas_limit: u64,
     base_multiplier: f64,
     gas_scalar: f64,
@@ -23,13 +23,13 @@ pub enum PricingError {
     TipTooLow { tip: u128, min_priority_fee: u128 },
 }
 
-impl Default for InclusionPricer {
+impl Default for PreconfPricer {
     fn default() -> Self {
         Self::new(DEFAULT_BLOCK_GAS_LIMIT)
     }
 }
 
-impl InclusionPricer {
+impl PreconfPricer {
     pub fn new(block_gas_limit: u64) -> Self {
         Self {
             block_gas_limit,

@@ -56,7 +56,7 @@ async fn handle_preconfirmation_request(
     let slot = req.slot;
     let pubkeys = keystores.get_pubkeys();
 
-    match constraint_state.validate_preconf_request(&req).await {
+    match constraint_state.validate_preconf_request(req.clone()).await {
         Ok(pubkey) => {
             if !pubkeys.contains(&pubkey) {
                 tracing::error!(
@@ -68,7 +68,7 @@ async fn handle_preconfirmation_request(
             // TODO::Validate preconfirmation request
             let mut signed_contraints_list: Vec<SignedConstraints> = vec![];
 
-            for tx in req.txs.iter() {
+            for tx in req.clone().txs.iter() {
                 let message = ConstraintsMessage::from_tx(pubkey.clone(), slot, tx.clone());
                 let digest = message.digest();
 
