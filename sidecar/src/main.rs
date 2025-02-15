@@ -120,13 +120,13 @@ async fn handle_commitment_deadline(
 
     tracing::info!("The commitment deadline is reached in slot {}", slot);
 
-    tracing::debug!("constraints in {} : {:#?}", slot, constraint_state.blocks.get(&slot));
 
 
-    let Some(block) = constraint_state.remove_constraints_at_slot(slot) else {
+    let Some(block) = constraint_state.blocks.get(&slot) else {
         tracing::debug!("Couldn't find a block at slot {slot}");
         return;
     };
+
     tracing::debug!("removed constraints at slot {slot}");
 
     match commit_boost_api
@@ -249,25 +249,30 @@ async fn main() {
 
     let _ = send_sidecar_info(keystores.get_pubkeys(), config.sidecar_info_sender_url, config.commitment_port).await;
 
-    let constraint_state = Arc::new(Mutex::new(constraint_state));
+    let constraint_state_arc = Arc::new(Mutex::new(constraint_state));
+
+
     let commit_boost_api = Arc::new(Mutex::new(commit_boost_api));
     let fallback_builder = Arc::new(Mutex::new(fallback_builder));
 
     // let (mut write, mut read) = ws_stream.split();
     // let constraint_state_store = constraint_state.write();
     loop {
-        let mut constraint_state_inner = constraint_state.lock().await;
+        let constraint_stat_inner_clone = Arc::clone(&constraint_state_arc);
+        let mut constraint_state_inner = constraint_stat_inner_clone.lock().await;
         // this will be unlocked after the second tokio::select slot is finished.
         tokio::select! {
             Some( CommitmentRequestEvent{req, res} ) = receiver.recv() => {
                 tracing::info!("received preconf request");
+                let constraint_state_clone = Arc::clone(&constraint_state_arc);
                 tokio::spawn(
-                    handle_preconfirmation_request(req, res, keystores.clone(), constraint_state.clone())
+                    handle_preconfirmation_request(req, res, keystores.clone(), constraint_state_clone)
                 );
             },
             Some(slot) = constraint_state_inner.commitment_deadline.wait() => {
+                let constraint_state_clone = Arc::clone(&constraint_state_arc);
                 tokio::spawn(
-                    handle_commitment_deadline(slot, constraint_state.clone(), commit_boost_api.clone(), fallback_builder.clone())
+                    handle_commitment_deadline(slot, constraint_state_clone, commit_boost_api.clone(), fallback_builder.clone())
                 );
             },
             Some(FetchPayloadRequest { slot, response_tx }) = payload_rx.recv() => {
@@ -282,8 +287,9 @@ async fn main() {
             //     }
             // },
             Ok(HeadEvent { slot, .. }) = head_event_listener.next_head() => {
+                let constraint_state_clone = Arc::clone(&constraint_state_arc);
                 tokio::spawn(
-                    handle_head_event(slot, constraint_state.clone())
+                    handle_head_event(slot, constraint_state_clone)
                 );
             },
         }
