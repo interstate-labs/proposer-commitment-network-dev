@@ -89,6 +89,7 @@ impl Default for Config {
 
 impl Config {
     pub fn new(envs: HashMap<String, String>) -> Self {
+        tracing::info!("envs: files {:?}", envs);
         // ,&envs["BUILDER_PORT"],&envs["collector_url"],&envs["BEACON_API_URL"], &envs["PRIVATE_KEY"], &envs["JWT_HEX"], &envs["VALIDATOR_INDEXES"], , &envs["COMMITMENT_DEADLINE"], &envs["SLOT_TIME"]
         let validators = ValidatorIndexes::from_str(&envs["VALIDATOR_INDEXES"].as_str()).unwrap();
 

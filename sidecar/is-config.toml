@@ -12,7 +12,14 @@ JWT=dc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b
 SLOT_TIME=2
 COMMITMENT_DEADLINE=100
 FEE_RECIPIENT=0x8aC112a5540f441cC9beBcC647041A6E0D595B94
-KEYSTORE_SECRETS_PATH=/root/proposer-commitment-network-dev/sidecar/keystores/secrets
-KEYSTORE_PUBKEYS_PATH=/root/proposer-commitment-network-dev/sidecar/keystores/keys
-DELEGATIONS_PATH="./delegations/delegations.json" 
-GATEWAY_CONTRACT="0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009"
+KEYSTORE_SECRETS_PATH=/app/keystores/secrets
+KEYSTORE_PUBKEYS_PATH=/app/keystores/keys
+DELEGATIONS_PATH=/app/delegations/delegations.json
+GATEWAY_CONTRACT=0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009
+
+
+[
+eigenlayer
+]
+contract_address = "0xE24a2A782766c3160361C59Ad59b3Adc7DfB3630"
+rpc_url = "https://ethereum-holesky.publicnode.com"

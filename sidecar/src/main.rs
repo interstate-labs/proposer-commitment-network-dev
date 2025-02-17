@@ -7,6 +7,8 @@ use state::{execution::ExecutionState, fetcher::ClientState, ConstraintState, He
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
+use std::path::PathBuf;
+use std::collections::HashMap;
 use tracing_subscriber::fmt::Subscriber;
 
 use commitment::{run_commitment_rpc_server, PreconfResponse};
@@ -185,13 +187,37 @@ async fn main() {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     // let config = Config::parse_from_cli().unwrap();
-    tracing::info!("path: {}", env!["CARGO_MANIFEST_DIR"]);
-    let mut env_path = env!["CARGO_MANIFEST_DIR"].to_string();
-    env_path.push_str("/.env");
-    let envs = read_file(env_path).unwrap();
+    // tracing::info!("path: {}", env!["CARGO_MANIFEST_DIR"]);
+    // let mut env_path = env!["CARGO_MANIFEST_DIR"].to_string();
+    // env_path.push_str("/.env");
+    let mut config_path = PathBuf::from(
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set")
+    );
+    config_path.push("is-config.toml");
+    // let envs = read_file(env_path).unwrap();
 
     let (sender, mut receiver) = mpsc::channel(1024);
-    let config = Config::new(envs);
+    // let config = Config::new(envs);
+    // let config_content = std::fs::read_to_string(&config_path)
+    //     .unwrap_or_else(|_| panic!("Failed to read config file: {:?}", config_path));
+    
+    // let config = Config::from_toml(&config_content);
+    // let config = Config::new(config_content);
+    let config_content = std::fs::read_to_string(&config_path)
+    .unwrap_or_else(|_| panic!("Failed to read config file: {:?}", config_path));
+
+// Convert the content into HashMap
+let mut env_map = HashMap::new();
+for line in config_content.lines() {
+    if let Some((key, value)) = line.split_once('=') {
+        let key = key.trim().to_string();
+        let value = value.trim().trim_matches('"').to_string();
+        env_map.insert(key, value);
+    }
+}
+
+let config = Config::new(env_map);
+tracing::info!("config: {:?}", config);
 
     let keystores = Keystores::new(
         &config.keystore_pubkeys_path,
