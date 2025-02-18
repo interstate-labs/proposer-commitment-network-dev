@@ -329,7 +329,7 @@ impl ConstraintState {
         ApiMetrics::set_latest_head(slot as u32);
         let epoch = slot / SLOTS_PER_EPOCH;
 
-        self.blocks.remove(&(slot-1));
+        self.blocks.remove(&(slot));
 
         if epoch != self.current_epoch.value {
             self.current_epoch.value = epoch;
