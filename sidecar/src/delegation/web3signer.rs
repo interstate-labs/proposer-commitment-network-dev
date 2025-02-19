@@ -217,7 +217,7 @@ pub async fn generate_from_web3signer(
 }
 
 /// A utility function to trim the pre-pended 0x prefix for hex strings.
-fn trim_hex_prefix(hex: &str) -> Result<String> {
+pub fn trim_hex_prefix(hex: &str) -> Result<String> {
     let trimmed = hex
         .get(2..)
         .ok_or_else(|| eyre::eyre!("Invalid hex string: {hex}"))?;

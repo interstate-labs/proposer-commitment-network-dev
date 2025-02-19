@@ -1,16 +1,19 @@
 use crate::commitment::request::{PreconfRequest, PreconfResult};
+use alloy::hex::{self, decode};
 use alloy::{primitives::FixedBytes, rpc::types::beacon::events::HeadEvent};
 pub use beacon_api_client::mainnet::Client;
 use commitment::request::{CommitmentRequestError, CommitmentRequestEvent};
-use delegation::web3signer::start_web3signer_server;
+use delegation::web3signer::{start_web3signer_server, trim_hex_prefix};
 use delegation::web3signer::Web3Signer;
+
+use ethereum_consensus::crypto::PublicKey;
 use metrics::{run_metrics_server, ApiMetrics};
 use state::{execution::ExecutionState, fetcher::ClientState, ConstraintState, HeadEventListener};
-use utils::send_sidecar_info;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tracing_subscriber::fmt::Subscriber;
+use utils::send_sidecar_info;
 
 use commitment::{run_commitment_rpc_server, PreconfResponse};
 use config::{
@@ -49,7 +52,7 @@ async fn handle_preconfirmation_request(
     res: Sender<PreconfResult>,
     keystores: Keystores,
     constraint_state: Arc<Mutex<ConstraintState>>,
-    web3signer: Web3Signer,
+    mut web3signer: Web3Signer,
 ) {
     let mut constraint_state = constraint_state.lock().await;
 
@@ -72,13 +75,36 @@ async fn handle_preconfirmation_request(
             let mut signed_contraints_list: Vec<SignedConstraints> = vec![];
 
             for tx in req.clone().txs.iter() {
+                // web3signer
+                tracing::info!("starting web3signer signing");
+                let accounts = web3signer
+                    .list_accounts()
+                    .await
+                    .expect("Web3signer fetching failed!");
+                tracing::info!(?accounts, "web3signer accounts");
+                let trimmed_account = trim_hex_prefix(&accounts[0]).unwrap_or_default();
+                let w3s_pubkey = PublicKey::try_from(hex::decode(trimmed_account).unwrap_or_default().as_slice()).unwrap_or_default();
+                tracing::info!(?w3s_pubkey, "web3signer publickey");
+                let w3s_message = ConstraintsMessage::from_tx(w3s_pubkey, slot, tx.clone());
+                tracing::info!(?w3s_message, "web3signer message");
+                let w3s_digest = format!("0x{}", &hex::encode(w3s_message.digest()));
+                tracing::info!(?w3s_digest, "web3signer digest");
+                let w3s_signature = web3signer
+                    .request_signature(&accounts[0], &w3s_digest)
+                    .await
+                    .expect("Web3signer signature failed!");
+                tracing::info!(?w3s_signature, "web3signer signature");
+                let mut bytes_array = [0u8; 96];
+                let bytes = hex::decode(w3s_signature.trim_start_matches("0x")).unwrap_or_default();
+                bytes_array[..bytes.len()].copy_from_slice(&bytes);
+
+                // keystores sign
                 let message = ConstraintsMessage::from_tx(pubkey.clone(), slot, tx.clone());
                 let digest = message.digest();
-
                 let signature = keystores.sign_commit_boost_root(digest, &pubkey);
 
                 let signed_constraints = match signature {
-                    Ok(signature) => SignedConstraints { message, signature },
+                    Ok(signature) => SignedConstraints { message, signature: FixedBytes(bytes_array) },
                     Err(e) => {
                         tracing::error!(?e, "Failed to sign constraints");
                         return;
@@ -122,8 +148,6 @@ async fn handle_commitment_deadline(
     let mut fallback_builder = fallback_builder.lock().await;
 
     tracing::info!("The commitment deadline is reached in slot {}", slot);
-
-
 
     let Some(block) = constraint_state.blocks.get(&slot) else {
         tracing::debug!("Couldn't find a block at slot {slot}");
@@ -227,7 +251,7 @@ async fn main() {
         ExecutionState::new(client_state, LimitOptions::default(), DEFAULT_GAS_LIMIT)
             .await
             .expect("Failed to create Execution State"),
-        &config.chain            
+        &config.chain,
     );
 
     let mut head_event_listener = HeadEventListener::run(beacon_client);
@@ -250,18 +274,28 @@ async fn main() {
 
     tracing::debug!("Connected to the server!");
 
-    let _ = send_sidecar_info(keystores.get_pubkeys(), config.sidecar_info_sender_url, config.commitment_port).await;
+    let _ = send_sidecar_info(
+        keystores.get_pubkeys(),
+        config.sidecar_info_sender_url,
+        config.commitment_port,
+    )
+    .await;
 
     let constraint_state_arc = Arc::new(Mutex::new(constraint_state));
-
 
     let commit_boost_api = Arc::new(Mutex::new(commit_boost_api));
     let fallback_builder = Arc::new(Mutex::new(fallback_builder));
 
-    let (url, mut web3signer_proc, creds) = start_web3signer_server().await.expect("Web3Signer server");
-    let mut web3signer = Web3Signer::connect(url, creds).await.expect("Web3signer connection failed!");
+    let (url, mut web3signer_proc, creds) =
+        start_web3signer_server().await.expect("Web3Signer server");
+    let mut web3signer = Web3Signer::connect(url, creds)
+        .await
+        .expect("Web3signer connection failed!");
 
-    let accounts = web3signer.list_accounts().await.expect("Web3signer fetching failed!");
+    let accounts = web3signer
+        .list_accounts()
+        .await
+        .expect("Web3signer fetching failed!");
     tracing::info!("Web3Signer Accounts: {:?}", accounts);
     // let (mut write, mut read) = ws_stream.split();
     // let constraint_state_store = constraint_state.write();
