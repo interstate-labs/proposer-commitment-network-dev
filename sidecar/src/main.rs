@@ -2,6 +2,8 @@ use crate::commitment::request::{PreconfRequest, PreconfResult};
 use alloy::{primitives::FixedBytes, rpc::types::beacon::events::HeadEvent};
 pub use beacon_api_client::mainnet::Client;
 use commitment::request::{CommitmentRequestError, CommitmentRequestEvent};
+use delegation::web3signer::start_web3signer_server;
+use delegation::web3signer::Web3Signer;
 use metrics::{run_metrics_server, ApiMetrics};
 use state::{execution::ExecutionState, fetcher::ClientState, ConstraintState, HeadEventListener};
 use utils::send_sidecar_info;
@@ -47,6 +49,7 @@ async fn handle_preconfirmation_request(
     res: Sender<PreconfResult>,
     keystores: Keystores,
     constraint_state: Arc<Mutex<ConstraintState>>,
+    web3signer: Web3Signer,
 ) {
     let mut constraint_state = constraint_state.lock().await;
 
@@ -255,6 +258,11 @@ async fn main() {
     let commit_boost_api = Arc::new(Mutex::new(commit_boost_api));
     let fallback_builder = Arc::new(Mutex::new(fallback_builder));
 
+    let (url, mut web3signer_proc, creds) = start_web3signer_server().await.expect("Web3Signer server");
+    let mut web3signer = Web3Signer::connect(url, creds).await.expect("Web3signer connection failed!");
+
+    let accounts = web3signer.list_accounts().await.expect("Web3signer fetching failed!");
+    tracing::info!("Web3Signer Accounts: {:?}", accounts);
     // let (mut write, mut read) = ws_stream.split();
     // let constraint_state_store = constraint_state.write();
     loop {
@@ -266,7 +274,7 @@ async fn main() {
                 tracing::info!("received preconf request");
                 let constraint_state_clone = Arc::clone(&constraint_state_arc);
                 tokio::spawn(
-                    handle_preconfirmation_request(req, res, keystores.clone(), constraint_state_clone)
+                    handle_preconfirmation_request(req, res, keystores.clone(), constraint_state_clone, web3signer.clone())
                 );
             },
             Some(slot) = constraint_state_inner.commitment_deadline.wait() => {
