@@ -2,3 +2,8 @@ type: "file-keystore"
 #pool shield render south used december repair injury gym surface extra true chat narrow carry lizard body table borrow ripple swallow soda any vehicle
 keystoreFile: "./keystore-m_12381_3600_0_0_0-1733041966.json"
 keystorePasswordFile: "./password.txt"
+# keystores:
+#   - keystoreFile: "./keystore-m_12381_3600_0_0_0-1733041966.json"
+#     keystorePasswordFile: "./password.txt"
+keystoreFile: "./keys/0x8a8bb292bcc481070d3afdbbc8789e2ab4b29c9603936e6d85f5ff71e23fc5b6d61009f0fa636b5d5b2dc309d39e3d75.json"
+keystorePasswordFile: "./secrets/0x8a8bb292bcc481070d3afdbbc8789e2ab4b29c9603936e6d85f5ff71e23fc5b6d61009f0fa636b5d5b2dc309d39e3d75"

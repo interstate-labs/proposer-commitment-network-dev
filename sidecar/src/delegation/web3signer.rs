@@ -230,6 +230,8 @@ pub async fn start_web3signer_server(
 
     // Keystore test data.
     let keystore_dir = test_data_dir.clone() + "/keystore";
+    let keystores_dir = test_data_dir.clone() + "/keystore/keys";
+    let passwords_dir = test_data_dir.clone() + "/keystore/secrets";
 
     // TLS test data.
     let tls_dir = test_data_dir.clone() + "/tls";
@@ -245,8 +247,8 @@ pub async fn start_web3signer_server(
 
     // Start the web3signer server.
     let web3signer_proc = Command::new(test_data_dir.clone() + "/web3signer-25.2.0/bin/web3signer")
-        .arg("--key-store-path")
-        .arg(keystore_dir.clone())
+        // .arg("--key-store-path")
+        // .arg(keystore_dir.clone())
         .arg("--tls-keystore-file")
         .arg(tls_keystore)
         .arg("--tls-allow-any-client")
@@ -264,6 +266,10 @@ pub async fn start_web3signer_server(
         .arg(keystore_dir.clone())
         .arg("--proxy-keystores-password-file")
         .arg(tls_password)
+        .arg("--keystores-path")
+        .arg(keystores_dir.clone())
+        .arg("--keystores-passwords-path")
+        .arg(passwords_dir.clone())
         .spawn()?;
 
     // Allow the server to start up.
