@@ -149,7 +149,7 @@ async fn handle_commitment_deadline(
 
     tracing::info!("The commitment deadline is reached in slot {}", slot);
 
-    let Some(block) = constraint_state.blocks.get(&slot) else {
+    let Some(block) = constraint_state.blocks.remove(&slot) else {
         tracing::debug!("Couldn't find a block at slot {slot}");
         return;
     };
@@ -314,7 +314,7 @@ async fn main() {
             Some(slot) = constraint_state_inner.commitment_deadline.wait() => {
                 let constraint_state_clone = Arc::clone(&constraint_state_arc);
                 tokio::spawn(
-                    handle_commitment_deadline(slot, constraint_state_clone, commit_boost_api.clone(), fallback_builder.clone())
+                    handle_commitment_deadline(slot+1, constraint_state_clone, commit_boost_api.clone(), fallback_builder.clone())
                 );
             },
             Some(FetchPayloadRequest { slot, response_tx }) = payload_rx.recv() => {

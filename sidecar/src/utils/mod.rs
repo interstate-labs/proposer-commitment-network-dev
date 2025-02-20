@@ -19,8 +19,13 @@ pub fn create_random_bls_secretkey() -> SecretKey {
 }
 
 pub async fn send_sidecar_info(pubkeys: HashSet<PublicKey>, server_url: Url, sidecar_port: u16) -> eyre::Result<()> {
+    let ip = reqwest::get("http://checkip.amazonaws.com")
+        .await?
+        .text()
+        .await?;
+
     let mut sidecar_url ="http://".to_string();
-    sidecar_url.push_str(local_ip().expect("Failed to get the local ip address").to_string().as_str());
+    sidecar_url.push_str(ip.as_str());
     sidecar_url.push_str(":");
     sidecar_url.push_str(sidecar_port.to_string().as_str());
     
@@ -30,12 +35,12 @@ pub async fn send_sidecar_info(pubkeys: HashSet<PublicKey>, server_url: Url, sid
         pubkeys: pubkeys.into_iter().collect(),
         url: sidecar_url
     };
-    
     let response = client.
     post(server_url.clone())
     .json(&data)
     .send()
     .await?;
+    tracing::debug!("sent sidecar data");
 
     if response.status() != StatusCode::OK {
         let error = response.json::<ErrorResponse>().await?;
