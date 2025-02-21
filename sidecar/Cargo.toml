@@ -7,7 +7,7 @@ edition = "2021"
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["macros"] }
 axum-server = "0.7"
-reqwest = { version = "0.12.9", features = ["rustls-tls"] }
+reqwest = "0.12"
 futures = "0.3"
 
 ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus", rev = "cf3c404" }

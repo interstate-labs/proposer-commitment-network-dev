@@ -74,7 +74,6 @@ impl BlockBuilder {
             client: reqwest::Client::new(),
             jwt_hex: config.jwt_hex.to_string(),
             engine_rpc_url: config.engine_api_url.clone(),
-            rpc_url: config.execution_api_url.clone()
         };
 
         Self {
@@ -517,7 +516,6 @@ pub(crate) struct EngineHinter {
     client: reqwest::Client,
     jwt_hex: String,
     engine_rpc_url: Url,
-    rpc_url: Url
 }
 
 impl EngineHinter {
@@ -530,15 +528,14 @@ impl EngineHinter {
 
         let raw_version = self
             .client
-            .post(self.rpc_url.as_str())
+            .post(self.engine_rpc_url.as_str())
             .header("Content-Type", "application/json")
+            .header("Authorization", auth_jwt.clone())
             .body(body)
             .send()
             .await?
             .text()
             .await?;
-
-        tracing::debug!(?raw_version, "raw version print");
 
         if raw_version.contains(r#""result":"Geth"#) {
             return Ok(EngineType::Geth);
