@@ -1,14 +1,19 @@
 use crate::commitment::request::{PreconfRequest, PreconfResult};
+use alloy::hex::{self, decode};
 use alloy::{primitives::FixedBytes, rpc::types::beacon::events::HeadEvent};
 pub use beacon_api_client::mainnet::Client;
 use commitment::request::{CommitmentRequestError, CommitmentRequestEvent};
+use delegation::web3signer::{start_web3signer_server, trim_hex_prefix};
+use delegation::web3signer::Web3Signer;
+
+use ethereum_consensus::crypto::PublicKey;
 use metrics::{run_metrics_server, ApiMetrics};
 use state::{execution::ExecutionState, fetcher::ClientState, ConstraintState, HeadEventListener};
-use utils::send_sidecar_info;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tracing_subscriber::fmt::Subscriber;
+use utils::send_sidecar_info;
 
 use commitment::{run_commitment_rpc_server, PreconfResponse};
 use config::{
@@ -22,9 +27,8 @@ use constraints::{
     FetchPayloadRequest, SignedConstraints, TransactionExt,
 };
 use env_file_reader::read_file;
-use keystores::Keystores;
-use tokio::sync::oneshot::Sender;
 
+use tokio::sync::oneshot::Sender;
 mod builder;
 mod commitment;
 mod config;
@@ -32,7 +36,6 @@ mod constraints;
 mod crypto;
 mod delegation;
 mod errors;
-mod keystores;
 mod metrics;
 mod onchain;
 mod state;
@@ -45,8 +48,8 @@ pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_"
 async fn handle_preconfirmation_request(
     req: PreconfRequest,
     res: Sender<PreconfResult>,
-    keystores: Keystores,
     constraint_state: Arc<Mutex<ConstraintState>>,
+    mut web3signer: Web3Signer,
 ) {
     let mut constraint_state = constraint_state.lock().await;
 
@@ -54,11 +57,12 @@ async fn handle_preconfirmation_request(
     ApiMetrics::increment_received_commitments_count();
 
     let slot = req.slot;
-    let pubkeys = keystores.get_pubkeys();
+    let pubkeys = web3signer.list_accounts().await.expect("Failed to load accounts");
 
     match constraint_state.validate_preconf_request(req.clone()).await {
         Ok(pubkey) => {
-            if !pubkeys.contains(&pubkey) {
+            let pubkey_str = format!("{:#?}", pubkey);
+            if !pubkeys.contains(&pubkey_str) {
                 tracing::error!(
                     "Not available validator in slot {} to sign in sidecar",
                     slot
@@ -69,18 +73,24 @@ async fn handle_preconfirmation_request(
             let mut signed_contraints_list: Vec<SignedConstraints> = vec![];
 
             for tx in req.clone().txs.iter() {
-                let message = ConstraintsMessage::from_tx(pubkey.clone(), slot, tx.clone());
-                let digest = message.digest();
+                // web3signer
+                let accounts = web3signer
+                    .list_accounts()
+                    .await
+                    .expect("Web3signer fetching failed!");
+                let trimmed_account = trim_hex_prefix(&accounts[0]).unwrap_or_default();
+                let w3s_pubkey = PublicKey::try_from(hex::decode(trimmed_account).unwrap_or_default().as_slice()).unwrap_or_default();
+                let w3s_message = ConstraintsMessage::from_tx(w3s_pubkey, slot, tx.clone());
+                let w3s_digest = format!("0x{}", &hex::encode(w3s_message.digest()));
+                let w3s_signature = web3signer
+                    .request_signature(&accounts[0], &w3s_digest)
+                    .await
+                    .expect("Web3signer signature failed!");
+                let mut bytes_array = [0u8; 96];
+                let bytes = hex::decode(w3s_signature.trim_start_matches("0x")).unwrap_or_default();
+                bytes_array[..bytes.len()].copy_from_slice(&bytes);
 
-                let signature = keystores.sign_commit_boost_root(digest, &pubkey);
-
-                let signed_constraints = match signature {
-                    Ok(signature) => SignedConstraints { message, signature },
-                    Err(e) => {
-                        tracing::error!(?e, "Failed to sign constraints");
-                        return;
-                    }
-                };
+                let signed_constraints= SignedConstraints { message: w3s_message, signature: FixedBytes(bytes_array)} ;
 
                 ApiMetrics::increment_preconfirmed_transactions_count(tx.tx.tx_type());
 
@@ -120,13 +130,11 @@ async fn handle_commitment_deadline(
 
     tracing::info!("The commitment deadline is reached in slot {}", slot);
 
-    tracing::debug!("constraints in {} : {:#?}", slot, constraint_state.blocks.get(&slot));
-
-
-    let Some(block) = constraint_state.remove_constraints_at_slot(slot) else {
+    let Some(block) = constraint_state.blocks.remove(&slot) else {
         tracing::debug!("Couldn't find a block at slot {slot}");
         return;
     };
+
     tracing::debug!("removed constraints at slot {slot}");
 
     match commit_boost_api
@@ -196,12 +204,6 @@ async fn main() {
     let (sender, mut receiver) = mpsc::channel(1024);
     let config = Config::new(envs);
 
-    let keystores = Keystores::new(
-        &config.keystore_pubkeys_path,
-        &config.keystore_secrets_path,
-        &config.chain,
-    );
-
     let _ = run_metrics_server(config.metrics_port);
 
     run_commitment_rpc_server(sender, &config).await;
@@ -224,7 +226,7 @@ async fn main() {
         ExecutionState::new(client_state, LimitOptions::default(), DEFAULT_GAS_LIMIT)
             .await
             .expect("Failed to create Execution State"),
-        &config.chain            
+        &config.chain,
     );
 
     let mut head_event_listener = HeadEventListener::run(beacon_client);
@@ -246,28 +248,47 @@ async fn main() {
     // };
 
     tracing::debug!("Connected to the server!");
+    let (url, mut web3signer_proc, creds) =
+        start_web3signer_server().await.expect("Web3Signer server");
+    let mut web3signer = Web3Signer::connect(url, creds)
+        .await
+        .expect("Web3signer connection failed!");
 
-    let _ = send_sidecar_info(keystores.get_pubkeys(), config.sidecar_info_sender_url, config.commitment_port).await;
+    let accounts = web3signer
+        .list_accounts()
+        .await
+        .expect("Web3signer fetching failed!");
 
-    let constraint_state = Arc::new(Mutex::new(constraint_state));
+    let _ = send_sidecar_info(
+        accounts,
+        config.sidecar_info_sender_url,
+        config.commitment_port,
+    )
+    .await;
+
+    let constraint_state_arc = Arc::new(Mutex::new(constraint_state));
+
     let commit_boost_api = Arc::new(Mutex::new(commit_boost_api));
     let fallback_builder = Arc::new(Mutex::new(fallback_builder));
 
     // let (mut write, mut read) = ws_stream.split();
     // let constraint_state_store = constraint_state.write();
     loop {
-        let mut constraint_state_inner = constraint_state.lock().await;
+        let constraint_stat_inner_clone = Arc::clone(&constraint_state_arc);
+        let mut constraint_state_inner = constraint_stat_inner_clone.lock().await;
         // this will be unlocked after the second tokio::select slot is finished.
         tokio::select! {
             Some( CommitmentRequestEvent{req, res} ) = receiver.recv() => {
                 tracing::info!("received preconf request");
+                let constraint_state_clone = Arc::clone(&constraint_state_arc);
                 tokio::spawn(
-                    handle_preconfirmation_request(req, res, keystores.clone(), constraint_state.clone())
+                    handle_preconfirmation_request(req, res, constraint_state_clone, web3signer.clone())
                 );
             },
             Some(slot) = constraint_state_inner.commitment_deadline.wait() => {
+                let constraint_state_clone = Arc::clone(&constraint_state_arc);
                 tokio::spawn(
-                    handle_commitment_deadline(slot, constraint_state.clone(), commit_boost_api.clone(), fallback_builder.clone())
+                    handle_commitment_deadline(slot+1, constraint_state_clone, commit_boost_api.clone(), fallback_builder.clone())
                 );
             },
             Some(FetchPayloadRequest { slot, response_tx }) = payload_rx.recv() => {
@@ -282,8 +303,9 @@ async fn main() {
             //     }
             // },
             Ok(HeadEvent { slot, .. }) = head_event_listener.next_head() => {
+                let constraint_state_clone = Arc::clone(&constraint_state_arc);
                 tokio::spawn(
-                    handle_head_event(slot, constraint_state.clone())
+                    handle_head_event(slot, constraint_state_clone)
                 );
             },
         }
