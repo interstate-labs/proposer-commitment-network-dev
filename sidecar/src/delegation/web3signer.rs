@@ -226,7 +226,7 @@ pub fn trim_hex_prefix(hex: &str) -> Result<String> {
 
 pub async fn start_web3signer_server(
 ) -> eyre::Result<(String, Child, Web3SignerTlsCredentials)> {
-    let test_data_dir = "/home/proposer-commitment-network-dev/sidecar/web3signer".to_owned();
+    let test_data_dir = "/home/web3signer".to_owned();
 
     // Keystore test data.
     let keystore_dir = test_data_dir.clone() + "/keystore";
@@ -241,12 +241,12 @@ pub async fn start_web3signer_server(
     let combined_pem_path = tls_dir.clone() + "/combined.pem";
 
     // Check if web3signer is installed (in $PATH).
-    if Command::new(test_data_dir.clone() + "/web3signer-25.2.0/bin/web3signer").spawn().is_err() {
+    if Command::new(test_data_dir.clone() + "web3signer").spawn().is_err() {
         bail!("Web3Signer is not installed in $PATH");
     }
 
     // Start the web3signer server.
-    let web3signer_proc = Command::new(test_data_dir.clone() + "/web3signer-25.2.0/bin/web3signer")
+    let web3signer_proc = Command::new(test_data_dir.clone() + "web3signer")
         // .arg("--key-store-path")
         // .arg(keystore_dir.clone())
         .arg("--tls-keystore-file")
