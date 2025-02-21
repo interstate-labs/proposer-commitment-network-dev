@@ -170,6 +170,7 @@ impl ConstraintState {
     }
 
     pub fn remove_constraints_at_slot(&mut self, slot: u64) -> Option<Block> {
+        tracing::debug!("constraints block in slot {}, {:#?}", slot ,  self.blocks.get(&slot));
         self.blocks.remove(&slot)
     }
 
@@ -328,7 +329,7 @@ impl ConstraintState {
         ApiMetrics::set_latest_head(slot as u32);
         let epoch = slot / SLOTS_PER_EPOCH;
 
-        self.blocks.remove(&slot);
+        self.blocks.remove(&(slot));
 
         if epoch != self.current_epoch.value {
             self.current_epoch.value = epoch;

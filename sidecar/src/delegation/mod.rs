@@ -1,3 +1,6 @@
+pub mod web3signer;
+pub mod types;
+pub mod signing;
 use std::{fs::read_to_string, ops::Deref, path::PathBuf};
 
 use alloy::signers::k256::sha2::{Digest, Sha256};
