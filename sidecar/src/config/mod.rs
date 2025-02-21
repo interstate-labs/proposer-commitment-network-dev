@@ -50,6 +50,10 @@ pub struct Config {
     pub fee_recipient: Address,
     /// Local builder bls private key for signing fallback payloads.
     pub builder_bls_private_key: BLSSecretKey,
+    /// The path to the ERC-2335 keystore secret passwords.
+    pub keystore_secrets_path: PathBuf,
+    /// Path to the keystores folder.
+    pub keystore_pubkeys_path: PathBuf,
     /// Path to the delegations file.
     pub delegations_path: Option<PathBuf>,
     /// Gateway contract address
@@ -73,6 +77,12 @@ impl Default for Config {
             fee_recipient: Address::ZERO,
             builder_bls_private_key: random_bls_secret(),
             collector_ws: String::new(),
+            keystore_secrets_path: PathBuf::from(
+                "/work/proposer-commitment-network/sidecar/keystores/secrets",
+            ),
+            keystore_pubkeys_path: PathBuf::from(
+                "/work/proposer-commitment-network/sidecar/keystores/keys",
+            ),
             delegations_path: None,
             gateway_contract: Address::from_str("0x8aC112a5540f441cC9beBcC647041A6E0D595B94")
                 .unwrap(),
@@ -115,6 +125,8 @@ impl Config {
             jwt_hex: envs["JWT"].clone(),
             fee_recipient: Address::parse_checksummed(&envs["FEE_RECIPIENT"], None).unwrap(),
             builder_bls_private_key: random_bls_secret(),
+            keystore_secrets_path: PathBuf::from(envs["KEYSTORE_SECRETS_PATH"].as_str()),
+            keystore_pubkeys_path: PathBuf::from(envs["KEYSTORE_PUBKEYS_PATH"].as_str()),
             delegations_path: {
                 if envs["DELEGATIONS_PATH"].len() > 0 {
                     Some(PathBuf::from(envs["DELEGATIONS_PATH"].as_str()))
@@ -200,6 +212,14 @@ mod tests {
         envs.insert(
             "FEE_RECIPIENT".to_string(),
             "0x0000000000000000000000000000000000000001".to_string(),
+        );
+        envs.insert(
+            "KEYSTORE_SECRETS_PATH".to_string(),
+            "/work/proposer-commitment-network/sidecar/keystores/secrets".to_string(),
+        );
+        envs.insert(
+            "KEYSTORE_PUBKEYS_PATH".to_string(),
+            "/work/proposer-commitment-network/sidecar/keystores/keys".to_string(),
         );
         envs.insert(
             "DELEGATIONS_PATH".to_string(),
