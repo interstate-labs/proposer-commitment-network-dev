@@ -54,6 +54,10 @@ pub struct Config {
     pub delegations_path: Option<PathBuf>,
     /// Gateway contract address
     pub gateway_contract: Address,
+    /// Web3Signer settings
+    pub web3signer_url: String,
+    pub ca_cert_path: String,
+    pub combined_pem_path: String,
 }
 
 impl Default for Config {
@@ -76,6 +80,9 @@ impl Default for Config {
             delegations_path: None,
             gateway_contract: Address::from_str("0x8aC112a5540f441cC9beBcC647041A6E0D595B94")
                 .unwrap(),
+            web3signer_url: String::new(),
+            ca_cert_path: String::new(),
+            combined_pem_path: String::new(),
         }
     }
 }
@@ -123,6 +130,9 @@ impl Config {
                 }
             },
             gateway_contract: envs["GATEWAY_CONTRACT"].parse().unwrap(),
+            web3signer_url: envs["WEB3SIGNER_URL"].parse().unwrap(),
+            ca_cert_path: envs["CA_CERT_PATH"].parse().unwrap(),
+            combined_pem_path: envs["CLIENT_COMBINED_PEM_PATH"].parse().unwrap(),
         }
     }
 }

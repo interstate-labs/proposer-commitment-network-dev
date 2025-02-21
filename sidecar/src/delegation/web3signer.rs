@@ -46,6 +46,7 @@ impl Web3Signer {
     /// Reference: https://commit-boost.github.io/commit-boost-client/api/
     pub async fn list_accounts(&mut self) -> Result<Vec<String>> {
         let path = self.base_url.join("/signer/v1/get_pubkeys")?;
+        tracing::info!(?path);
         let resp = self
             .client
             .get(path)
@@ -222,61 +223,4 @@ pub fn trim_hex_prefix(hex: &str) -> Result<String> {
         .get(2..)
         .ok_or_else(|| eyre::eyre!("Invalid hex string: {hex}"))?;
     Ok(trimmed.to_string())
-}
-
-pub async fn start_web3signer_server(
-) -> eyre::Result<(String, Child, Web3SignerTlsCredentials)> {
-    let test_data_dir = "/home/web3signer".to_owned();
-
-    // Keystore test data.
-    let keystore_dir = test_data_dir.clone() + "/keystore";
-    let keystores_dir = test_data_dir.clone() + "/keystore/keys";
-    let passwords_dir = test_data_dir.clone() + "/keystore/secrets";
-
-    // TLS test data.
-    let tls_dir = test_data_dir.clone() + "/tls";
-    let tls_keystore = tls_dir.clone() + "/key.p12";
-    let tls_password = tls_dir.clone() + "/password.txt";
-    let ca_cert_path = tls_dir.clone() + "/web3signer.crt";
-    let combined_pem_path = tls_dir.clone() + "/combined.pem";
-
-    // Check if web3signer is installed (in $PATH).
-    if Command::new(test_data_dir.clone() + "web3signer").spawn().is_err() {
-        bail!("Web3Signer is not installed in $PATH");
-    }
-
-    // Start the web3signer server.
-    let web3signer_proc = Command::new(test_data_dir.clone() + "web3signer")
-        // .arg("--key-store-path")
-        // .arg(keystore_dir.clone())
-        .arg("--tls-keystore-file")
-        .arg(tls_keystore)
-        .arg("--tls-allow-any-client")
-        .arg("true")
-        .arg("--tls-keystore-password-file")
-        .arg(tls_password.clone())
-        .arg("eth2")
-        .arg("--network")
-        .arg("mainnet")
-        .arg("--slashing-protection-enabled")
-        .arg("false")
-        .arg("--commit-boost-api-enabled")
-        .arg("true")
-        .arg("--proxy-keystores-path")
-        .arg(keystore_dir.clone())
-        .arg("--proxy-keystores-password-file")
-        .arg(tls_password)
-        .arg("--keystores-path")
-        .arg(keystores_dir.clone())
-        .arg("--keystores-passwords-path")
-        .arg(passwords_dir.clone())
-        .spawn()?;
-
-    // Allow the server to start up.
-    tokio::time::sleep(Duration::from_secs(5)).await;
-
-    let credentials = Web3SignerTlsCredentials { ca_cert_path, combined_pem_path };
-    let url = "https://127.0.0.1:9000".to_string();
-
-    Ok((url, web3signer_proc, credentials))
 }
