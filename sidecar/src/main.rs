@@ -3,8 +3,7 @@ use alloy::hex::{self, decode};
 use alloy::{primitives::FixedBytes, rpc::types::beacon::events::HeadEvent};
 pub use beacon_api_client::mainnet::Client;
 use commitment::request::{CommitmentRequestError, CommitmentRequestEvent};
-use delegation::web3signer::{start_web3signer_server, trim_hex_prefix};
-use delegation::web3signer::Web3Signer;
+use delegation::web3signer::{Web3Signer, Web3SignerTlsCredentials, trim_hex_prefix};
 
 use ethereum_consensus::crypto::PublicKey;
 use metrics::{run_metrics_server, ApiMetrics};
@@ -248,9 +247,10 @@ async fn main() {
     // };
 
     tracing::debug!("Connected to the server!");
-    let (url, mut web3signer_proc, creds) =
-        start_web3signer_server().await.expect("Web3Signer server");
-    let mut web3signer = Web3Signer::connect(url, creds)
+    
+    let web3signer_url = config.web3signer_url.clone();
+    let creds = Web3SignerTlsCredentials { ca_cert_path: config.ca_cert_path.clone(), combined_pem_path: config.combined_pem_path.clone() };
+    let mut web3signer = Web3Signer::connect(web3signer_url, creds)
         .await
         .expect("Web3signer connection failed!");
 
@@ -259,6 +259,7 @@ async fn main() {
         .await
         .expect("Web3signer fetching failed!");
 
+    tracing::info!(?accounts);
     let _ = send_sidecar_info(
         accounts,
         config.sidecar_info_sender_url,
