@@ -41,7 +41,7 @@ pub struct LimitOptions {
     /// states.
     #[clap(
         long,
-        env = "BOLT_SIDECAR_MAX_ACCOUNT_STATES_SIZE",
+        env = "MAX_ACCOUNT_STATES_SIZE",
         default_value_t = LimitOptions::default().max_account_states_size,
     )]
     pub max_account_states_size: NonZero<usize>,
