@@ -55,8 +55,7 @@ impl Chain {
     }
 }
 
-/// Event types that can be emitted by the validator pubkey to
-/// signal some action on the Bolt protocol.
+/// Event types that can be emitted by the validator pubkey to signal some action
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
 enum SignedMessageAction {

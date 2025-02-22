@@ -24,14 +24,14 @@ pub struct LimitOptions {
     /// Max committed gas per slot
     #[clap(
         long,
-        env = "BOLT_SIDECAR_MAX_COMMITTED_GAS",
+        env = "MAX_COMMITTED_GAS",
         default_value_t = LimitOptions::default().max_committed_gas_per_slot
     )]
     pub max_committed_gas_per_slot: NonZero<u64>,
     /// Min profit per gas to accept a commitment
     #[clap(
         long,
-        env = "BOLT_SIDECAR_MIN_PROFIT",
+        env = "MIN_PROFIT",
         default_value_t = LimitOptions::default().min_inclusion_profit
     )]
     pub min_inclusion_profit: u64,
