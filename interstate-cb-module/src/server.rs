@@ -85,9 +85,6 @@ impl BuilderRuntimeState {
     }
 }
 
-/// The extended builder-API incorporating the constraints-API as outlined in
-/// the specification: <https://chainbound.github.io/interstate-docs/api/builder>.
-///
 /// Additional endpoints are defined in [extra_routes](ConstraintsApi::extra_routes).
 pub struct ConstraintsApi;
 
@@ -110,7 +107,6 @@ impl BuilderApi<BuilderRuntimeState> for ConstraintsApi {
     }
 
     /// Fetches the extra routes necessary for supporting the constraints API as per
-    /// the specification: <https://chainbound.github.io/interstate-docs/api/builder>.
     fn extra_routes() -> Option<Router<PbsState<BuilderRuntimeState>>> {
         let mut router = Router::new();
         router = router.route(SUBMIT_CONSTRAINTS_ROUTE, post(submit_constraints));
@@ -121,8 +117,6 @@ impl BuilderApi<BuilderRuntimeState> for ConstraintsApi {
     }
 }
 
-/// Submits signed constraints to the builder.
-/// Spec: <https://chainbound.github.io/interstate-docs/api/builder#constraints>
 #[tracing::instrument(skip_all)]
 async fn submit_constraints(
     State(mut state): State<PbsState<BuilderRuntimeState>>,
@@ -160,7 +154,6 @@ async fn submit_constraints(
 }
 
 /// Transfers the right to submit constraints to another BLS key.
-/// Spec: <https://chainbound.github.io/interstate-docs/api/builder#delegate>
 #[tracing::instrument(skip_all)]
 async fn delegate(
     State(state): State<PbsState<BuilderRuntimeState>>,
@@ -172,7 +165,6 @@ async fn delegate(
 }
 
 /// Revokes constraint submission rights from a BLS key.
-/// Spec: <https://chainbound.github.io/interstate-docs/api/builder#revoke>
 #[tracing::instrument(skip_all)]
 async fn revoke(
     State(state): State<PbsState<BuilderRuntimeState>>,
@@ -184,7 +176,6 @@ async fn revoke(
 }
 
 /// Fetches a header along with its proofs for a given slot and parent hash.
-/// Spec: <https://chainbound.github.io/interstate-docs/api/builder#get_header_with_proofs>
 #[tracing::instrument(skip_all, fields(slot = params.slot))]
 async fn get_header_with_proofs(
     State(mut state): State<PbsState<BuilderRuntimeState>>,
