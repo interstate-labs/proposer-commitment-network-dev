@@ -10,4 +10,4 @@ Interstate is an extension to the PBS / MEV-Boost pipeline which enables instant
 We follow the common api preconfirmation api spec. Read the full docs at: https://docs.interstate.so
 
 # Setting up Web3Signer
-See docs.interstate.so
+Interstate sidecar should be run in a secure enclave, without access to keystores or any other sensitive data. We require running web3signer or another signer in order to create this enclave. Please see https://docs.interstate.so for further details.
