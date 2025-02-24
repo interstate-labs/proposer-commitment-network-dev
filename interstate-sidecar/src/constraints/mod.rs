@@ -8,7 +8,10 @@ use alloy::{
     eips::eip2718::{Decodable2718, Encodable2718},
     hex,
     primitives::{Address, Bytes, FixedBytes, TxKind, U256},
-    signers::k256::{sha2::{Digest, Sha256}, PublicKey},
+    signers::k256::{
+        sha2::{Digest, Sha256},
+        PublicKey,
+    },
 };
 use builder::{GetHeaderParams, GetPayloadResponse, SignedBuilderBid};
 use tokio::time::{timeout, Duration};
@@ -212,8 +215,14 @@ impl ConstraintsMessage {
             transactions: vec![constraint],
         }
     }
+}
 
-    pub fn digest(&self) -> [u8; 32] {
+pub trait ConstraintDigest {
+    fn digest(&self) -> [u8; 32];
+}
+
+impl ConstraintDigest for ConstraintsMessage {
+    fn digest(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(self.pubkey.to_vec());
         hasher.update(self.slot.to_le_bytes());
@@ -226,6 +235,7 @@ impl ConstraintsMessage {
         hasher.finalize().into()
     }
 }
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Constraint {
     pub(crate) tx: PooledTransactionsElement,
@@ -264,12 +274,11 @@ impl Constraint {
 
     pub fn validate(&self, sender: Address) -> bool {
         let recovered = self.tx.recover_signer();
-        match (sender, recovered ) {
+        match (sender, recovered) {
             (sender, Some(recovered)) if sender == recovered => true,
             _ => false,
         }
     }
-
 }
 
 #[derive(Debug, Clone)]

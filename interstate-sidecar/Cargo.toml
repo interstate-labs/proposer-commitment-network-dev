@@ -5,6 +5,9 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
+tonic = { version = "0.12.3", features = ["tls"] }
+rustls = { version = "0.23.22", features = ["ring"] }
+prost = "0.13.4"
 axum = { version = "0.7", features = ["macros"] }
 axum-server = "0.7"
 reqwest = { version = "0.12.9", features = ["rustls-tls"] }

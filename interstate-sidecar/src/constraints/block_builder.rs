@@ -73,7 +73,7 @@ impl BlockBuilder {
             client: reqwest::Client::new(),
             jwt_hex: config.jwt_hex.to_string(),
             engine_rpc_url: config.engine_api_url.clone(),
-            rpc_url: config.execution_api_url.clone()
+            rpc_url: config.execution_api_url.clone(),
         };
 
         Self {
@@ -516,7 +516,7 @@ pub(crate) struct EngineHinter {
     client: reqwest::Client,
     jwt_hex: String,
     engine_rpc_url: Url,
-    rpc_url: Url
+    rpc_url: Url,
 }
 
 impl EngineHinter {
@@ -692,7 +692,7 @@ mod tests {
 
     use crate::{
         commitment::request::PreconfRequest,
-        constraints::{ConstraintsMessage, SignedConstraints},
+        constraints::{ConstraintDigest, ConstraintsMessage, SignedConstraints},
         state::Block,
         test_utils::{default_test_transaction, get_test_config},
         BLSBytes, BLS_DST_PREFIX,
