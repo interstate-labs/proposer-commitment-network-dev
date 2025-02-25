@@ -1,0 +1,4 @@
+[env]
+CB_CONFIG="/root/kartos/proposer-commitment-network-dev/interstate-cb-module/cb-config.toml"
+METRICS_SERVER="10000"
+RUST_LOG="debug"

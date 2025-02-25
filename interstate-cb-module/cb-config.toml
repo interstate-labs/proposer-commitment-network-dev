@@ -1,0 +1,30 @@
+chain = "Mainnet"
+
+[pbs]
+port = 18550
+host = "0.0.0.0"
+
+genesis_time_sec=1738648239 
+beacon_rpc="http://127.0.0.1:33152"
+[[relays]]
+# url = "http://0x821f2a65afb70e7f2e820a925a9b4c80a159620582c1766b1b09729fec178b11ea22abb3a51f07b288be815a1a2ff516@127.0.0.1:33027"
+url = "https://0x821f2a65afb70e7f2e820a925a9b4c80a159620582c1766b1b09729fec178b11ea22abb3a51f07b288be815a1a2ff516@bloxroute.holesky.blxrbdn.com"
+
+[signer]
+[signer.loader]
+keys_path = "/work/devnetwork/new-validator-register/assigned_data/keys" # Fixed path to the keys folder to run validator
+secrets_path = "/work/devnetwork/new-validator-register/assigned_data/secrets" # Fixed path to the secrets folder to run validator
+
+[metrics]
+prometheus_config = "./prometheus.yml"
+
+[logs]
+# Path to the log directory
+# OPTIONAL, DEFAULT: /var/logs/commit-boost
+log_dir_path = "./logs"
+# Log level. Supported values: trace, debug, info, warn, error
+# OPTIONAL, DEFAULT: debug to file, info to stdout
+log_level = "debug"
+# Maximum number of log files to keep
+# OPTIONAL
+max_log_files = 30

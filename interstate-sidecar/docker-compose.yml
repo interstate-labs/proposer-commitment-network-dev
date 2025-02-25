@@ -1,0 +1,16 @@
+services:
+  interstate-boost:
+    image: whereasjovially/interstate-boost:1.1.0-dev
+    container_name: interstate-sidecar
+    restart: unless-stopped
+    ports:
+      - "8000:9061" # Interstate RPC port (this should be opened on your firewall!)
+      - "18551:9062"
+    volumes: 
+      - ./keystores:/keystores:ro
+      - .env:/work/interstate-protocol/proposer-commitment-network/.env:ro
+volumes:
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
