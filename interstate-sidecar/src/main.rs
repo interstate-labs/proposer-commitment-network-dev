@@ -77,12 +77,12 @@ async fn handle_preconfirmation_request(
                     .list_accounts()
                     .await
                     .expect("Web3signer fetching failed!");
-                let trimmed_account = trim_hex_prefix(&accounts[0]).unwrap_or_default();
+                let trimmed_account = trim_hex_prefix(&pubkey_str).unwrap_or_default();
                 let w3s_pubkey = PublicKey::try_from(hex::decode(trimmed_account).unwrap_or_default().as_slice()).unwrap_or_default();
                 let w3s_message = ConstraintsMessage::from_tx(w3s_pubkey, slot, tx.clone());
                 let w3s_digest = format!("0x{}", &hex::encode(w3s_message.digest()));
                 let w3s_signature = web3signer
-                    .request_signature(&accounts[0], &w3s_digest)
+                    .request_signature(&pubkey_str, &w3s_digest)
                     .await
                     .expect("Web3signer signature failed!");
                 let mut bytes_array = [0u8; 96];
