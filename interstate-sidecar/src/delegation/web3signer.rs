@@ -28,7 +28,7 @@ impl Web3Signer {
     pub async fn connect(addr: String, credentials: Web3SignerTlsCredentials) -> Result<Self> {
         let base_url = addr.parse()?;
         let (cert, identity) = compose_credentials(credentials)?;
-
+        
         let client = reqwest::Client::builder()
             .add_root_certificate(cert)
             .identity(identity)
