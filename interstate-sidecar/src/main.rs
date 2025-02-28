@@ -77,15 +77,17 @@ async fn handle_preconfirmation_request(
                     .list_accounts()
                     .await
                     .expect("Web3signer fetching failed!");
-                let trimmed_account = trim_hex_prefix(&accounts[0]).unwrap_or_default();
+
+                let trimmed_account = trim_hex_prefix(&pubkey_str).unwrap_or_default();
                 let w3s_pubkey = PublicKey::try_from(hex::decode(trimmed_account).unwrap_or_default().as_slice()).unwrap_or_default();
+                tracing::info!(?w3s_pubkey, ?pubkey, "web3signer publickey");
                 let w3s_message = ConstraintsMessage::from_tx(w3s_pubkey, slot, tx.clone());
                 let w3s_digest = format!("0x{}", &hex::encode(w3s_message.digest()));
-                let w3s_signature = web3signer
-                    .request_signature(&accounts[0], &w3s_digest)
+                let w3_signature = web3signer
+                    .request_signature(&pubkey_str, &w3s_digest)
                     .await;
 
-                let signed_constraints = match w3s_signature {
+                let signed_constraints = match w3_signature {
                     Ok(signature) => {
                         let mut bytes_array = [0u8; 96];
                         let bytes = hex::decode(signature.trim_start_matches("0x")).unwrap_or_default();
@@ -97,7 +99,6 @@ async fn handle_preconfirmation_request(
                         return;
                     }
                 };
-
                 ApiMetrics::increment_preconfirmed_transactions_count(tx.tx.tx_type());
 
                 constraint_state.add_constraint(slot, signed_constraints.clone());
@@ -210,6 +211,9 @@ async fn main() {
     let (sender, mut receiver) = mpsc::channel(1024);
     let config = Config::new(envs);
 
+    let domain = &config.chain.commit_boost_domain();
+    tracing::info!(?domain);
+
     let _ = run_metrics_server(config.metrics_port);
 
     run_commitment_rpc_server(sender, &config).await;
@@ -278,6 +282,20 @@ async fn main() {
 
     let commit_boost_api = Arc::new(Mutex::new(commit_boost_api));
     let fallback_builder = Arc::new(Mutex::new(fallback_builder));
+
+
+    let web3signer_url = config.web3signer_url.clone();
+    let creds = Web3SignerTlsCredentials { ca_cert_path: config.ca_cert_path.clone(), combined_pem_path: config.combined_pem_path.clone() };
+    let mut web3signer = Web3Signer::connect(web3signer_url, creds)
+        .await
+        .expect("Web3signer connection failed!");
+
+    let accounts = web3signer
+        .list_accounts()
+        .await
+        .expect("Web3signer fetching failed!");
+
+    tracing::info!(?accounts);
 
     // let (mut write, mut read) = ws_stream.split();
     // let constraint_state_store = constraint_state.write();

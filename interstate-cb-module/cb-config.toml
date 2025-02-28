@@ -1,14 +1,13 @@
-chain = "Mainnet"
+chain = "Holesky"
 
 [pbs]
 port = 18550
 host = "0.0.0.0"
 
-genesis_time_sec=1738648239 
-beacon_rpc="http://127.0.0.1:33152"
+genesis_time_sec=1738648239
+beacon_rpc="http://162.55.190.235:32855"
 [[relays]]
-# url = "http://0x821f2a65afb70e7f2e820a925a9b4c80a159620582c1766b1b09729fec178b11ea22abb3a51f07b288be815a1a2ff516@127.0.0.1:33027"
-url = "https://0x821f2a65afb70e7f2e820a925a9b4c80a159620582c1766b1b09729fec178b11ea22abb3a51f07b288be815a1a2ff516@bloxroute.holesky.blxrbdn.com"
+url = "http://0xa55c1285d84ba83a5ad26420cd5ad3091e49c55a813eee651cd467db38a8c8e63192f47955e9376f6b42f6d190571cb5@37.27.216.100:32865"
 
 [signer]
 [signer.loader]
