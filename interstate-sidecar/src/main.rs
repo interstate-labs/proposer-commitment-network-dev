@@ -83,13 +83,20 @@ async fn handle_preconfirmation_request(
                 let w3s_digest = format!("0x{}", &hex::encode(w3s_message.digest()));
                 let w3s_signature = web3signer
                     .request_signature(&accounts[0], &w3s_digest)
-                    .await
-                    .expect("Web3signer signature failed!");
-                let mut bytes_array = [0u8; 96];
-                let bytes = hex::decode(w3s_signature.trim_start_matches("0x")).unwrap_or_default();
-                bytes_array[..bytes.len()].copy_from_slice(&bytes);
+                    .await;
 
-                let signed_constraints= SignedConstraints { message: w3s_message, signature: FixedBytes(bytes_array)} ;
+                let signed_constraints = match w3s_signature {
+                    Ok(signature) => {
+                        let mut bytes_array = [0u8; 96];
+                        let bytes = hex::decode(signature.trim_start_matches("0x")).unwrap_or_default();
+                        bytes_array[..bytes.len()].copy_from_slice(&bytes);
+                        SignedConstraints { message: w3s_message, signature: FixedBytes(bytes_array) }
+                    },
+                    Err(e) => {
+                        tracing::error!(?e, "Failed to sign constraints");
+                        return;
+                    }
+                };
 
                 ApiMetrics::increment_preconfirmed_transactions_count(tx.tx.tx_type());
 

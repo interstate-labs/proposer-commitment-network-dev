@@ -29,3 +29,6 @@ VOLUME ["/keystores:ro", "/work/interstate-protocol/proposer-commitment-network/
 
 ENTRYPOINT ["/interstate-boost"]
 CMD ["--read-only"]
+
+
+web3signer --tls-allow-any-client true --tls-keystore-file /home/web3signer-25.2.0/tls/key.p12 --tls-keystore-password-file /home/web3signer-25.2.0/tls/password.txt --http-listen-host "0.0.0.0" --http-host-allowlist "*" eth2 --network holesky --keystores-path /home/web3signer-25.2.0/keystore/keys  --keystores-passwords-path /home/web3signer-25.2.0/keystore/secrets --slashing-protection-enabled false --commit-boost-api-enabled true --proxy-keystores-path /home/web3signer-25.2.0/tls/keystore --proxy-keystores-password-file /home/web3signer-25.2.0/tls/password.txt 

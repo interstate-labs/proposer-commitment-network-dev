@@ -88,27 +88,28 @@ async fn handle_preconfirmation_request(
                 tracing::info!(?w3s_pubkey, ?pubkey, "web3signer publickey");
                 let w3s_message = ConstraintsMessage::from_tx(w3s_pubkey, slot, tx.clone());
                 let w3s_digest = format!("0x{}", &hex::encode(w3s_message.digest()));
-                let w3s_signature = web3signer
+                let w3_signature = web3signer
                     .request_signature(&pubkey_str, &w3s_digest)
-                    .await
-                    .expect("Web3signer signature failed!");
-                let mut bytes_array = [0u8; 96];
-                let bytes = hex::decode(w3s_signature.trim_start_matches("0x")).unwrap_or_default();
-                bytes_array[..bytes.len()].copy_from_slice(&bytes);
+                    .await;
 
                 // keystores sign
-                let message = ConstraintsMessage::from_tx(pubkey.clone(), slot, tx.clone());
-                tracing::info!(?w3s_message, ?message, "web3signer message");
+                // let message = ConstraintsMessage::from_tx(pubkey.clone(), slot, tx.clone());
+                // tracing::info!(?w3s_message, ?message, "web3signer message");
 
-                let digest = message.digest();
-                tracing::info!(?w3s_digest, ?digest, "web3signer digest");
+                // let digest = message.digest();
+                // let digest_hex = hex::encode(digest);
+                // tracing::info!(?w3s_digest, ?digest_hex, "web3signer digest");
 
-                let signature = keystores.sign_commit_boost_root(digest, &pubkey);
-                let signature1 = keystores.sign_commit_boost_root(digest, &pubkey);
-                tracing::info!(?w3s_signature, ?signature, ?signature, "web3signer signature");
+                // let signature = keystores.sign_commit_boost_root(digest, &pubkey);
+                // tracing::info!("web3signer signature: {}, sidecar signature: {:#?}", w3s_signature, signature, );
 
-                let signed_constraints = match signature {
-                    Ok(signature) => SignedConstraints { message, signature: FixedBytes(bytes_array) },
+                let signed_constraints = match w3_signature {
+                    Ok(signature) => {
+                        let mut bytes_array = [0u8; 96];
+                        let bytes = hex::decode(signature.trim_start_matches("0x")).unwrap_or_default();
+                        bytes_array[..bytes.len()].copy_from_slice(&bytes);
+                        SignedConstraints { message: w3s_message, signature: FixedBytes(bytes_array) }
+                    },
                     Err(e) => {
                         tracing::error!(?e, "Failed to sign constraints");
                         return;
