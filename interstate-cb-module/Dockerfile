@@ -20,5 +20,5 @@ WORKDIR /app
 RUN apt-get update
 RUN apt-get install -y openssl ca-certificates libssl3 libssl-dev
 
-COPY --from=builder /app/target/release/interstate-boost /usr/local/bin
-ENTRYPOINT ["/usr/local/bin/interstate-boost"]
+COPY --from=builder /app/target/release/interstate-cb-module /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/interstate-cb-module"]

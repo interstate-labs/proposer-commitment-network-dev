@@ -30,7 +30,7 @@ pub async fn send_sidecar_info(pubkeys: Vec<String>, server_url: Url, sidecar_po
     sidecar_url.push_str(":");
     sidecar_url.push_str(sidecar_port.to_string().as_str());
     
-    let client = reqwest::ClientBuilder::new().user_agent("interstate-boost").build().unwrap();
+    let client = reqwest::ClientBuilder::new().user_agent("interstate-cb-module").build().unwrap();
     let mut pubkey_array: Vec<PublicKey> = vec![];
     for pk in pubkeys {
         let w3s_pubkey = PublicKey::try_from(hex::decode(pk).unwrap_or_default().as_slice()).unwrap_or_default();

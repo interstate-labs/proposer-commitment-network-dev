@@ -2795,7 +2795,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "interstate-boost"
+name = "interstate-cb-module"
 version = "0.1.0"
 dependencies = [
  "alloy",

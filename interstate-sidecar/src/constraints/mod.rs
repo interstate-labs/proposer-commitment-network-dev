@@ -284,7 +284,7 @@ impl CommitBoostApi {
         Self {
             url,
             client: ClientBuilder::new()
-                .user_agent("interstate-boost")
+                .user_agent("interstate-cb-module")
                 .build()
                 .unwrap(),
             delegations: delegations_messages.clone(),

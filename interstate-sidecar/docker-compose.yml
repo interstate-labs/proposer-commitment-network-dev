@@ -1,6 +1,6 @@
 services:
-  interstate-boost:
-    image: whereasjovially/interstate-boost:1.1.0-dev
+  interstate-cb-module:
+    image: interstatecrypto/interstate-cb-module:latest
     container_name: interstate-sidecar
     restart: unless-stopped
     ports:
