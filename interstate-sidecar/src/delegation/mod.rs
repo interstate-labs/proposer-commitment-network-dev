@@ -1,4 +1,5 @@
 pub mod web3signer;
+pub mod dirk;
 pub mod types;
 pub mod signing;
 use std::{fs::read_to_string, ops::Deref, path::PathBuf};
