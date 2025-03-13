@@ -1,0 +1,168 @@
+# General Application Settings
+nameOverride: "propose-commit-network"
+fullnameOverride: "propose-commit-network"
+
+# Number of replicas for both projects (adjustable as needed)
+replicaCount: 1
+
+# Docker Image Settings
+images:
+  interstateCb:
+    repository: kartos0x/interstate-cb-module
+    tag: latest
+    pullPolicy: IfNotPresent
+  interstateSidecar:
+    repository: kartos0x/interstate-sidecar
+    tag: latest
+    pullPolicy: IfNotPresent
+
+# Application Arguments for interstate-cb
+interstateCbArgs:
+  - "--config=/app/config/cb-config.toml"
+
+# Environment Variables for interstate-cb
+interstateCbEnv:
+  - name: CHAIN
+    value: "Holesky"
+  - name: BEACON_RPC
+    value: "http://5.161.69.231:32781"
+  - name: CB_CONFIG
+    value: "/app/config/cb-config.toml"
+  - name: METRICS_SERVER
+    value: "10000"
+  - name: RUST_LOG
+    value: "debug"
+
+# Environment Variables for interstate-sidecar
+interstateSidecarEnv:
+  RUST_LOG: "debug"
+  RUST_BACKTRACE: "1"
+  CARGO_MANIFEST_DIR: "/app"
+  COMMITMENT_PORT: "9063"
+  METRICS_PORT: "8018"
+  CHAIN: "kurtosis"
+  VALIDATOR_INDEXES: "0..64"
+  BEACON_API_URL: "http://5.161.69.231:32781"
+  EXECUTION_API_URL: "http://5.161.69.231:32773"
+  ENGINE_API_URL: "http://5.161.69.231:32771"
+  COLLECTOR_URL: "http://95.216.145.221:18550"
+  COLLECTOR_SOCKET: "ws://5.161.69.231:4000/ws"
+  BUILDER_PORT: "9064"
+  JWT: "dc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b"
+  SLOT_TIME: "2"
+  COMMITMENT_DEADLINE: "100"
+  FEE_RECIPIENT: "0x8aC112a5540f441cC9beBcC647041A6E0D595B94"
+  DELEGATIONS_PATH: "./delegations/delegations.json"
+  GATEWAY_CONTRACT: "0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009"
+  WEB3SIGNER_URL: "https://b2e4-2a01-4ff-f0-4039-00-1.ngrok-free.app"
+  CA_CERT_PATH: "/root/kartos/web3signer-25.2.0/crt/w3s.crt"
+  CLIENT_COMBINED_PEM_PATH: "/root/kartos/web3signer-25.2.0/crt/my_cert.pem"
+  SIDECAR_INFO_SENDER_URL: "http://5.161.69.231:8000"
+  COMMIT_BOOST_SIGNER_URL: "http://5.161.69.231:18551"
+
+# Ports Configuration for both projects
+services:
+  interstateCb:
+    type: ClusterIP
+    ports:
+      - name: http
+        port: 18550
+        protocol: TCP
+      - name: metrics
+        port: 9090
+        protocol: TCP
+  interstateSidecar:
+    type: ClusterIP
+    port: 9063
+
+# ConfigMap Mounting for interstate-cb
+interstateCbConfigMaps:
+  - name: cb-config
+    data:
+      cb-config.toml: |
+        chain = "Holesky"
+        
+        [pbs]
+        port = 18550
+        host = "0.0.0.0"
+        genesis_time_sec=1738648239
+        beacon_rpc="/5.161.69.231:32781"
+
+        [[relays]]
+        url = "https://0x821f2a65afb70e7f2e820a925a9b4c80a159620582c1766b1b09729fec178b11ea22abb3a51f07b288be815a1a2ff516@bloxroute.holesky.blxrbdn.com"
+
+        [signer]
+        [signer.loader]
+        keys_path = "/work/devnetwork/new-validator-register/assigned_data/keys"
+        secrets_path = "/work/devnetwork/new-validator-register/assigned_data/secrets"
+
+        [metrics]
+        prometheus_config = "./prometheus.yml"
+
+        [logs]
+        log_dir_path = "./logs"
+        log_level = "debug"
+        max_log_files = 30
+
+# Volume Configuration
+volumes:
+  interstateCb:
+    - name: cb-config-volume
+      configMap:
+        name: cb-config
+        items:
+          - key: cb-config.toml
+            path: cb-config.toml
+
+# Volume Mounts for interstate-cb
+volumeMounts:
+  interstateCb:
+    - name: cb-config-volume
+      mountPath: /app/config
+      subPath: cb-config.toml
+
+# StatefulSet Configuration for interstate-cb (if persistence is needed)
+statefulSet:
+  interstateCb:
+    enabled: true
+    persistence:
+      enabled: true
+      mountPath: /data
+      size: 50Gi
+      accessModes:
+        - ReadWriteOnce
+
+# Node Affinity & Scheduling (Optional)
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Liveness & Readiness Probes for interstate-cb
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# Liveness & Readiness Probes for interstate-sidecar
+interstateSidecarLivenessProbe:
+  httpGet:
+    path: /health
+    port: 9063
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+interstateSidecarReadinessProbe:
+  httpGet:
+    path: /health
+    port: 9063
+  initialDelaySeconds: 5
+  periodSeconds: 10
