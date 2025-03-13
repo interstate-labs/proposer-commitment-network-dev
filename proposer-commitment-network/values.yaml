@@ -8,11 +8,11 @@ replicaCount: 1
 # Docker Image Settings
 images:
   interstateCb:
-    repository: kartos0x/interstate-cb-module
+    repository: interstatecrypto/interstate-cb-module
     tag: latest
     pullPolicy: IfNotPresent
   interstateSidecar:
-    repository: kartos0x/interstate-sidecar
+    repository: interstatecrypto/interstate-sidecar
     tag: latest
     pullPolicy: IfNotPresent
 

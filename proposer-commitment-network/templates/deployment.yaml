@@ -15,7 +15,7 @@ spec:
       containers:
         # interstate-cb container
         - name: interstate-cb
-          image: kartos0x/interstate-cb-module:latest
+          image: interstatecrypto/interstate-cb-module:latest
           env:
             - name: CB_CONFIG
               value: "/app/config/cb-config.toml"  # Ensure it points to the mounted ConfigMap file
@@ -38,7 +38,7 @@ spec:
 
         # interstate-sidecar container
         - name: interstate-sidecar
-          image: "kartos0x/interstate-sidecar:latest"
+          image: "interstatecrypto/interstate-sidecar:latest"
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
