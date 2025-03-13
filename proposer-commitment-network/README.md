@@ -1,4 +1,9 @@
-# Get Started
+# Quickstart
+
+run the network quickly by running:
+```helm install proposer-commitment-network ./proposer-commitment-network```
+
+
 
 ## How to Install Helm
 
