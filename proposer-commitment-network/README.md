@@ -1,6 +1,7 @@
 # Quickstart
 
-run the network quickly by running:
+run the network quickly by setting env variables and running:
+
 ```helm install proposer-commitment-network ./proposer-commitment-network```
 
 
