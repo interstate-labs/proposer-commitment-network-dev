@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: propose-commitment-network
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: propose-commitment-network
+  template:
+    metadata:
+      labels:
+        app: propose-commitment-network
+    spec:
+      containers:
+        # interstate-cb container
+        - name: interstate-cb
+          image: interstatecrypto/interstate-cb-module:latest
+          env:
+            - name: CB_CONFIG
+              value: "/app/config/cb-config.toml"  # Ensure it points to the mounted ConfigMap file
+            - name: METRICS_SERVER
+              value: "10000"
+            - name: RUST_LOG
+              value: "debug"
+          ports:
+            - containerPort: 18550
+          envFrom:
+            - configMapRef:
+                name: propose-commitment-network-config
+          volumeMounts:
+            - name: cb-config-volume
+              mountPath: /app/config
+            - name: keys-volume
+              mountPath: /work/devnetwork/new-validator-register/assigned_data/keys
+            - name: secrets-volume
+              mountPath: /work/devnetwork/new-validator-register/assigned_data/secrets
+
+        # interstate-sidecar container
+        - name: interstate-sidecar
+          image: "interstatecrypto/interstate-sidecar:latest"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: propose-commitment-network-config
+          ports:
+            - name: commitment
+              containerPort: 9063
+            - name: metrics
+              containerPort: 8018
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/.env
+              subPath: interstate-sidecar.env
+
+      volumes:
+        # Volumes for interstate-cb
+        - name: cb-config-volume
+          configMap:
+            name: propose-commitment-network-config
+            items:
+              - key: cb-config.toml
+                path: cb-config.toml
+        - name: config-volume
+          configMap:
+            name: propose-commitment-network-config
+        - name: keys-volume
+          hostPath:
+            path: /work/devnetwork/new-validator-register/assigned_data/keys
+        - name: secrets-volume
+          hostPath:
+            path: /work/devnetwork/new-validator-register/assigned_data/secrets
