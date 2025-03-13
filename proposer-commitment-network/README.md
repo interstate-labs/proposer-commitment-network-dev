@@ -1,10 +1,4 @@
-# Quickstart
-
-run the network quickly by setting env variables and running:
-
-```helm install proposer-commitment-network ./proposer-commitment-network```
-
-
+# Get Started
 
 ## How to Install Helm
 
@@ -43,11 +37,49 @@ run the network quickly by setting env variables and running:
 
 Please update values.yaml, configMap.yaml, deployment.yaml and service.yaml files
 
+### How to set env to connect sidecar to external signer
+
+    https://github.com/interstate-labs/proposer-commitment-network-dev/blob/feat/helm/proposer-commitment-network/values.yaml#L61C1-L61C3
+
+    https://github.com/interstate-labs/proposer-commitment-network-dev/blob/feat/helm/proposer-commitment-network/templates/configMap.yaml#L55
+
+    Here, please update the COMMIT_BOOST_SIGNER_URL with external signer link
+
 ### How to run
 
     helm install <namespace> ./<namespace>
 
     eg: helm install proposer-commitment-network ./proposer-commitment-network
+
+## How to set envs for interstate-cb module
+
+    In values.yaml
+
+        `https://github.com/interstate-labs/proposer-commitment-network-dev/blob/feat/helm/proposer-commitment-network/values.yaml#L26` and `https://github.com/interstate-labs/proposer-commitment-network-dev/blob/feat/helm/proposer-commitment-network/values.yaml#L28`
+
+        `https://github.com/interstate-labs/proposer-commitment-network-dev/blob/feat/helm/proposer-commitment-network/values.yaml#L83` and `https://github.com/interstate-labs/proposer-commitment-network-dev/blob/feat/helm/proposer-commitment-network/values.yaml#L89`
+
+        Please update the CHAIN Name and BEACON_RPC
+
+    In templates/configMap.yaml
+
+        `https://github.com/interstate-labs/proposer-commitment-network-dev/blob/feat/helm/proposer-commitment-network/templates/configMap.yaml#L7` and `https://github.com/interstate-labs/proposer-commitment-network-dev/blob/feat/helm/proposer-commitment-network/templates/configMap.yaml#L13`
+
+        Please update the CHAIN Name and BEACON_RPC
+
+## How to set envs for interstate-sidecar
+
+    In values.yaml
+
+        From `https://github.com/interstate-labs/proposer-commitment-network-dev/blob/feat/helm/proposer-commitment-network/values.yaml#L37` to `https://github.com/interstate-labs/proposer-commitment-network-dev/blob/feat/helm/proposer-commitment-network/values.yaml#L61`
+
+        Please update envs for interstate-sidecar
+
+    In templates/configMap.yaml
+    
+        From `https://github.com/interstate-labs/proposer-commitment-network-dev/blob/feat/helm/proposer-commitment-network/templates/configMap.yaml#L32` to `https://github.com/interstate-labs/proposer-commitment-network-dev/blob/feat/helm/proposer-commitment-network/templates/configMap.yaml#L55`
+
+        Please update envs for interstate-sidecar
 
 ## Check the running kubnets
 
