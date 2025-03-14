@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: propose-commitment-network-service
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector:
     app: propose-commitment-network
   ports:

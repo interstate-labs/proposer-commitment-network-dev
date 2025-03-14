@@ -59,6 +59,7 @@ pub struct Config {
     pub ca_cert_path: String,
     pub combined_pem_path: String,
     pub commit_boost_signer_url: String,
+    pub web3signer_enabled: bool,
 }
 
 impl Default for Config {
@@ -85,6 +86,7 @@ impl Default for Config {
             ca_cert_path: String::new(),
             combined_pem_path: String::new(),
             commit_boost_signer_url: String::new(),
+            web3signer_enabled: false,
         }
     }
 }
@@ -136,6 +138,7 @@ impl Config {
             ca_cert_path: envs["CA_CERT_PATH"].parse().unwrap(),
             combined_pem_path: envs["CLIENT_COMBINED_PEM_PATH"].parse().unwrap(),
             commit_boost_signer_url: envs["COMMIT_BOOST_SIGNER_URL"].parse().unwrap(),
+            web3signer_enabled: envs["WEB3SIGNER_ENABLED"].parse().unwrap(),
         }
     }
 }
