@@ -44,4 +44,3 @@ data:
     {{ .name }}={{ .value }}
     {{- end }}
     {{- end }}
-
