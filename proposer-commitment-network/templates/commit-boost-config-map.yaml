@@ -1,0 +1,40 @@
+{{- if .Values.cb.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.appName }}-cb-config
+  labels:
+    app.kubernetes.io/name: {{ .Values.appName }}
+    app.kubernetes.io/component: cb
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  {{- if .Values.cb.annotations }}
+  annotations:
+    {{- toYaml .Values.cb.annotations | nindent 4 }}
+  {{- end }}
+data:
+  cb-config.toml: |
+    chain = "{{ .Values.cb.config.chain }}"
+
+    [pbs]
+    port = {{ .Values.cb.port }}
+    host = "{{ .Values.cb.config.pbs.host }}"
+    genesis_time_sec={{ .Values.cb.config.pbs.genesisTimeSec }}
+    beacon_rpc="{{ .Values.cb.config.pbs.beaconRpc }}"
+
+    {{- range .Values.cb.config.relays }}
+    [[relays]]
+    url = "{{ .url }}"
+    {{- end }}
+
+    [metrics]
+    prometheus_config = "{{ .Values.cb.config.metrics.prometheusConfig }}"
+
+    [logs]
+    log_dir_path = "{{ .Values.cb.config.logs.logDirPath }}"
+    log_level = "{{ .Values.cb.config.logs.logLevel }}"
+    max_log_files = {{ .Values.cb.config.logs.maxLogFiles }}
+{{- end }}
+

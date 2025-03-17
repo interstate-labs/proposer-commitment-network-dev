@@ -1,168 +1,291 @@
-# General Application Settings
-nameOverride: "propose-commit-network"
-fullnameOverride: "propose-commit-network"
+---
+## Global application configuration
+# -- The name of the application, used as a prefix for component names
+appName: proposer-commitment-network
 
-# Number of replicas for both projects (adjustable as needed)
-replicaCount: 1
+## Sidecar component configuration
+# -- Enable or disable the sidecar component
+sidecar:
+  enabled: true
+  ## Sidecar image configuration
+  image:
+    # -- Docker image repository for the sidecar component
+    repository: "interstatecrypto/interstate-sidecar"
+    # -- Docker image tag for the sidecar component
+    # @default -- "latest"
+    tag: "latest"
+    # -- Image pull policy
+    # @default -- "IfNotPresent"
+    pullPolicy: "IfNotPresent"
 
-# Docker Image Settings
-images:
-  interstateCb:
-    repository: kartos0x/interstate-cb-module
-    tag: latest
+  ## Sidecar service configuration
+  service:
+    # -- Service type, values: NodePort, ClusterIP, LoadBalancer
+    # @default -- NodePort
+    type: NodePort
+    # -- Whether to expose the metrics port when using NodePort service type
+    # @default -- false
+    exposeMetrics: false
+    # -- NodePort specifications for service ports
+    nodePorts:
+      # -- Specify commitment port number (30000-32767) or leave null for auto-assignment
+      commitment: null
+    # -- Additional annotations for the service
+    annotations: {}
+      # service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+      # metallb.universe.tf/allow-shared-ip: commitboost
+
+  ## Sidecar ingress configuration
+  ingress:
+    # -- Enable or disable the ingress
+    enabled: false
+    # -- Ingress class name to use
+    className: "nginx"
+    # -- Additional annotations for the ingress
+    annotations:
+      kubernetes.io/ingress.class: nginx
+      nginx.ingress.kubernetes.io/rewrite-target: /
+    # -- List of host configurations for the ingress
+    hosts:
+      - host: # Your FQDN here.
+        paths:
+          - path: /
+            # -- Path type for the ingress (Prefix, Exact, ImplementationSpecific)
+            pathType: Prefix
+            # -- Service port name to route traffic to
+            serviceName: commitment
+    # -- TLS configuration for the ingress
+    tls:
+      - secretName: sidecar-tls-secret
+        hosts:
+          # Add items to the list of DNS records to create. e.g.:
+          # - sidecar.example.com
+
+  ## Sidecar deployment configuration
+  deployment:
+    # -- Number of replicas for the deployment
+    replicas: 1
+    # -- Update strategy configuration for the deployment
+    updateStrategy:
+      # -- Type of update strategy (RollingUpdate or Recreate)
+      type: RollingUpdate
+      # -- Maximum number of pods that can be created over the desired number of pods
+      maxSurge: 1
+      # -- Maximum number of pods that can be unavailable during the update
+      maxUnavailable: 0
+    # -- Termination grace period in seconds
+    terminationGracePeriodSeconds: 30
+    # -- Security context for the pod
+    podSecurityContext:
+      # -- Group ID to run the pod as
+      fsGroup: 1000
+      # -- Run containers as non-root
+      runAsNonRoot: true
+      # -- User ID to run the container as
+      runAsUser: 1000
+    # -- Security context for the container
+    containerSecurityContext:
+      # -- Prevent privilege escalation
+      allowPrivilegeEscalation: false
+      capabilities:
+        # -- Drop all Linux capabilities for security
+        drop:
+          - ALL
+    # -- Resource limits and requests for the container
+    resources:
+      limits:
+        # -- CPU limit
+        cpu: 1000m
+        # -- Memory limit
+        memory: 1Gi
+      requests:
+        # -- CPU request
+        cpu: 200m
+        # -- Memory request
+        memory: 256Mi
+    # -- Liveness probe configuration to determine if the container is running
+    livenessProbe:
+      httpGet:
+        # -- Path for liveness probe
+        path: /health
+        # -- Port for liveness probe
+        port: metrics
+      # -- Initial delay before probing starts
+      initialDelaySeconds: 30
+      # -- How often to perform the probe
+      periodSeconds: 10
+    # -- Readiness probe configuration to determine if the container is ready to receive traffic
+    readinessProbe:
+      httpGet:
+        # -- Path for readiness probe
+        path: /ready
+        # -- Port for readiness probe
+        port: metrics
+      # -- Initial delay before probing starts
+      initialDelaySeconds: 5
+      # -- How often to perform the probe
+      periodSeconds: 10
+
+  ## Sidecar environment variables
+  env:
+    # -- Rust logging level
+    rustLog: "debug"
+    # -- Enable Rust backtrace (1=enabled, 0=disabled)
+    rustBacktrace: "1"
+    # -- Path to the cargo manifest directory
+    cargoManifestDir: "/app"
+    # -- Port for commitment service
+    commitmentPort: "9063"
+    # -- Port for metrics service
+    metricsPort: "8018"
+    # -- Blockchain network to connect to
+    chain: "kurtosis"
+    # -- Range of validator indexes to monitor
+    validatorIndexes: "0..64"
+    # -- URL for the beacon node API
+    beaconApiUrl: "http://5.161.69.231:32781"
+    # -- URL for the execution client API
+    executionApiUrl: "http://5.161.69.231:32773"
+    # -- URL for the engine API
+    engineApiUrl: "http://5.161.69.231:32771"
+    # -- URL for the collector service
+    collectorUrl: "http://95.216.145.221:18550"
+    # -- WebSocket URL for the collector service
+    collectorSocket: "ws://5.161.69.231:4000/ws"
+    # -- Port for the builder service
+    builderPort: "9064"
+    # -- JWT token for authentication
+    jwt: "dc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b"
+    # -- Time in seconds between slots
+    slotTime: "2"
+    # -- Deadline for commitments in milliseconds
+    commitmentDeadline: "100"
+    # -- Ethereum address to receive fees
+    feeRecipient: "0x8aC112a5540f441cC9beBcC647041A6E0D595B94"
+    # -- Path to delegations configuration file
+    delegationsPath: "/app/delegations/delegations.json"
+    # -- Ethereum address of the gateway contract
+    gatewayContract: "0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009"
+    # -- URL for the Web3Signer service
+    web3SignerUrl: "https://b2e4-2a01-4ff-f0-4039-00-1.ngrok-free.app"
+    # -- Path to CA certificate file
+    caCertPath: "/root/kartos/web3signer-25.2.0/crt/w3s.crt"
+    # -- Path to combined client certificate and key PEM file
+    clientCombinedPemPath: "/root/kartos/web3signer-25.2.0/crt/my_cert.pem"
+    # -- URL for sidecar info sender service
+    sidecarInfoSenderUrl: "http://5.161.69.231:8000"
+    # -- URL for commit boost signer service
+    commitBoostSignerUrl: "http://5.161.69.231:18551"
+
+## Commitment Boost (CB) component configuration
+cb:
+  # -- Additional annotations for the CB component
+  annotations: {}
+  # -- Enable or disable the CB component
+  enabled: true
+  # -- Port for the CB service
+  port: 18550
+  ## CB image configuration
+  image:
+    # -- Docker image repository for the CB component
+    repository: "interstatecrypto/interstate-cb-module"
+    # -- Docker image tag for the CB component
+    # @default -- "latest"
+    tag: "latest"
+    # -- Image pull policy
+    # @default -- "IfNotPresent"
     pullPolicy: IfNotPresent
-  interstateSidecar:
-    repository: kartos0x/interstate-sidecar
-    tag: latest
-    pullPolicy: IfNotPresent
+  ## CB configuration
+  config:
+    # -- Blockchain network to connect to
+    chain: "Holesky"
+    ## PBS (Proposer-Builder Separation) configuration
+    pbs:
+      # -- Host address to bind to
+      host: "0.0.0.0"
+      # -- Genesis timestamp in seconds since Unix epoch
+      genesisTimeSec: "1738648239"
+      # -- URL for the beacon node RPC
+      beaconRpc: "http://5.161.69.231:32781"
+    ## Relay configuration
+    relays:
+      # -- List of relay endpoints to connect to
+      - url: "https://0x821f2a65afb70e7f2e820a925a9b4c80a159620582c1766b1b09729fec178b11ea22abb3a51f07b288be815a1a2ff516@bloxroute.holesky.blxrbdn.com"
+    ## Metrics configuration
+    metrics:
+      # -- Path to Prometheus configuration file
+      prometheusConfig: "./prometheus.yml"
+    ## Logs configuration
+    logs:
+      # -- Directory path for log files
+      logDirPath: "./logs"
+      # -- Log level (debug, info, warn, error)
+      logLevel: "debug"
+      # -- Maximum number of log files to retain
+      maxLogFiles: 30
+  ## CB deployment configuration
+  deployment:
+    # -- Port for the CB service
+    port: 18550
+    # -- Number of replicas for the deployment
+    replicas: 1
+    # -- Update strategy configuration for the deployment
+    updateStrategy:
+      # -- Type of update strategy (RollingUpdate or Recreate)
+      type: RollingUpdate
+      # -- Maximum number of pods that can be created over the desired number of pods
+      maxSurge: 1
+      # -- Maximum number of pods that can be unavailable during the update
+      maxUnavailable: 0
+    # -- Termination grace period in seconds
+    terminationGracePeriodSeconds: 60
+    # -- Security context for the pod
+    podSecurityContext:
+      # -- Group ID to run the pod as
+      fsGroup: 1000
+      # -- Run containers as non-root
+      runAsNonRoot: true
+      # -- User ID to run the container as
+      runAsUser: 1000
+    # -- Security context for the container
+    containerSecurityContext:
+      # -- Prevent privilege escalation
+      allowPrivilegeEscalation: false
+      capabilities:
+        # -- Drop all Linux capabilities for security
+        drop:
+          - ALL
+      # -- Mount the root filesystem as read-only
+      readOnlyRootFilesystem: true
+    # -- Resource limits and requests for the container
+    resources:
+      limits:
+        # -- CPU limit
+        cpu: 1000m
+        # -- Memory limit
+        memory: 1Gi
+      requests:
+        # -- CPU request
+        cpu: 200m
+        # -- Memory request
+        memory: 256Mi
+    # -- Log level for the deployment
+    logLevel: "debug"
+    # -- Pod affinity rules for scheduling
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - propose-commitment-network
+                  - key: app.kubernetes.io/component
+                    operator: In
+                    values:
+                      - cb
+              topologyKey: kubernetes.io/hostname
 
-# Application Arguments for interstate-cb
-interstateCbArgs:
-  - "--config=/app/config/cb-config.toml"
-
-# Environment Variables for interstate-cb
-interstateCbEnv:
-  - name: CHAIN
-    value: "Holesky"
-  - name: BEACON_RPC
-    value: "http://5.161.69.231:32781"
-  - name: CB_CONFIG
-    value: "/app/config/cb-config.toml"
-  - name: METRICS_SERVER
-    value: "10000"
-  - name: RUST_LOG
-    value: "debug"
-
-# Environment Variables for interstate-sidecar
-interstateSidecarEnv:
-  RUST_LOG: "debug"
-  RUST_BACKTRACE: "1"
-  CARGO_MANIFEST_DIR: "/app"
-  COMMITMENT_PORT: "9063"
-  METRICS_PORT: "8018"
-  CHAIN: "kurtosis"
-  VALIDATOR_INDEXES: "0..64"
-  BEACON_API_URL: "http://5.161.69.231:32781"
-  EXECUTION_API_URL: "http://5.161.69.231:32773"
-  ENGINE_API_URL: "http://5.161.69.231:32771"
-  COLLECTOR_URL: "http://5.161.69.231:18550"
-  COLLECTOR_SOCKET: "ws://5.161.69.231:4000/ws"
-  BUILDER_PORT: "9064"
-  JWT: "dc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b"
-  SLOT_TIME: "2"
-  COMMITMENT_DEADLINE: "100"
-  FEE_RECIPIENT: "0x8aC112a5540f441cC9beBcC647041A6E0D595B94"
-  DELEGATIONS_PATH: "./delegations/delegations.json"
-  GATEWAY_CONTRACT: "0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009"
-  WEB3SIGNER_URL: "https://b2e4-2a01-4ff-f0-4039-00-1.ngrok-free.app"
-  CA_CERT_PATH: "/root/kartos/web3signer-25.2.0/crt/w3s.crt"
-  CLIENT_COMBINED_PEM_PATH: "/root/kartos/web3signer-25.2.0/crt/my_cert.pem"
-  SIDECAR_INFO_SENDER_URL: "http://5.161.69.231:8000"
-  COMMIT_BOOST_SIGNER_URL: "http://5.161.69.231:18551"
-
-# Ports Configuration for both projects
-services:
-  interstateCb:
-    type: ClusterIP
-    ports:
-      - name: http
-        port: 18550
-        protocol: TCP
-      - name: metrics
-        port: 9090
-        protocol: TCP
-  interstateSidecar:
-    type: ClusterIP
-    port: 9063
-
-# ConfigMap Mounting for interstate-cb
-interstateCbConfigMaps:
-  - name: cb-config
-    data:
-      cb-config.toml: |
-        chain = "Holesky"
-        
-        [pbs]
-        port = 18550
-        host = "0.0.0.0"
-        genesis_time_sec=1738648239
-        beacon_rpc="/5.161.69.231:32781"
-
-        [[relays]]
-        url = "https://0x821f2a65afb70e7f2e820a925a9b4c80a159620582c1766b1b09729fec178b11ea22abb3a51f07b288be815a1a2ff516@bloxroute.holesky.blxrbdn.com"
-
-        [signer]
-        [signer.loader]
-        keys_path = "/work/devnetwork/new-validator-register/assigned_data/keys"
-        secrets_path = "/work/devnetwork/new-validator-register/assigned_data/secrets"
-
-        [metrics]
-        prometheus_config = "./prometheus.yml"
-
-        [logs]
-        log_dir_path = "./logs"
-        log_level = "debug"
-        max_log_files = 30
-
-# Volume Configuration
-volumes:
-  interstateCb:
-    - name: cb-config-volume
-      configMap:
-        name: cb-config
-        items:
-          - key: cb-config.toml
-            path: cb-config.toml
-
-# Volume Mounts for interstate-cb
-volumeMounts:
-  interstateCb:
-    - name: cb-config-volume
-      mountPath: /app/config
-      subPath: cb-config.toml
-
-# StatefulSet Configuration for interstate-cb (if persistence is needed)
-statefulSet:
-  interstateCb:
-    enabled: true
-    persistence:
-      enabled: true
-      mountPath: /data
-      size: 50Gi
-      accessModes:
-        - ReadWriteOnce
-
-# Node Affinity & Scheduling (Optional)
-nodeSelector: {}
-tolerations: []
-affinity: {}
-
-# Liveness & Readiness Probes for interstate-cb
-livenessProbe:
-  httpGet:
-    path: /health
-    port: http
-  initialDelaySeconds: 5
-  periodSeconds: 10
-
-readinessProbe:
-  httpGet:
-    path: /health
-    port: http
-  initialDelaySeconds: 5
-  periodSeconds: 10
-
-# Liveness & Readiness Probes for interstate-sidecar
-interstateSidecarLivenessProbe:
-  httpGet:
-    path: /health
-    port: 9063
-  initialDelaySeconds: 5
-  periodSeconds: 10
-
-interstateSidecarReadinessProbe:
-  httpGet:
-    path: /health
-    port: 9063
-  initialDelaySeconds: 5
-  periodSeconds: 10
