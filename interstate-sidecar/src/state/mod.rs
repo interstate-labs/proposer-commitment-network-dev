@@ -89,7 +89,6 @@ pub struct ConstraintState {
     pub latest_slot_timestamp: Instant,
     pub current_epoch: Epoch,
     pub header: BeaconBlockHeader,
-    pub validator_indexes: ValidatorIndexes,
     pub max_commitments_in_block: usize,
     pub max_commitment_gas: NonZero<u64>,
     pub min_priority_fee: u128,
@@ -110,7 +109,6 @@ const RETRY_BACKOFF_MILLIS: u64 = 100;
 impl ConstraintState {
     pub fn new(
         beacon_client: Client,
-        validator_indexes: ValidatorIndexes,
         commitment_deadline_duration: Duration,
         execution: ExecutionState<ClientState>,
         config: &ChainConfig,
@@ -122,7 +120,6 @@ impl ConstraintState {
             latest_slot: Default::default(),
             latest_slot_timestamp: Instant::now(),
             current_epoch: Default::default(),
-            validator_indexes,
             beacon_client,
             execution,
             header: BeaconBlockHeader::default(),

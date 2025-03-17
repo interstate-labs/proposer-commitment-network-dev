@@ -29,12 +29,8 @@ pub(crate) fn get_test_config() -> Config {
         "http://127.0.0.1:36469".to_string(),
     );
     envs.insert(
-        "COLLECTOR_URL".to_string(),
+        "CB_URL".to_string(),
         "http://127.0.0.1:4000".to_string(),
-    );
-    envs.insert(
-        "COLLECTOR_SOCKET".to_string(),
-        "ws://127.0.0.1:4000/ws".to_string(),
     );
     envs.insert("BUILDER_PORT".to_string(), "9064".to_string());
     envs.insert(

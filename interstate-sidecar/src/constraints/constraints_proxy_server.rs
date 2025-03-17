@@ -43,21 +43,8 @@ pub async fn run_constraints_proxy_server<P>(
 where
     P: PayloadFetcher + Send + Sync + 'static,
 {
-    let mut delegations = Vec::new();
-    if let Some(delegations_path) = &config.delegations_path {
-        match load_signed_delegations(delegations_path) {
-            Ok(contents) => {
-                tracing::info!("Loaded {} delegations", contents.len());
-                delegations.extend(contents);
-            }
-            Err(e) => {
-                tracing::error!(%e, "Failed to load delegations");
-            }
-        }
-    }
-
     let commit_boost_api: CommitBoostApi =
-        CommitBoostApi::new(config.collector_url.clone(), &delegations);
+        CommitBoostApi::new(config.cb_url.clone());
     let proxy_server = Arc::new(ConstraintsAPIProxyServer::new(
         commit_boost_api.clone(),
         fallback_payload_fetcher,
