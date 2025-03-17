@@ -29,9 +29,7 @@ pub struct Config {
     /// The builder server port to listen on (handling constraints apis)
     pub builder_port: u16,
     /// The constraints collector url
-    pub collector_url: Url,
-    /// The constraints collector websocket url
-    pub collector_ws: String,
+    pub cb_url: Url,
     /// The router url
     pub sidecar_info_sender_url: Url,
     /// URL for the beacon client API URL
@@ -40,8 +38,6 @@ pub struct Config {
     pub execution_api_url: Url,
     /// The engine API url
     pub engine_api_url: Url,
-    /// Validator indexes of connected validators that the sidecar should accept commitments on behalf of
-    pub validator_indexes: ValidatorIndexes,
     /// The chain on which the sidecar is running
     pub chain: ChainConfig,
     /// The jwt.hex secret to authenticate calls to the engine API
@@ -50,8 +46,6 @@ pub struct Config {
     pub fee_recipient: Address,
     /// Local builder bls private key for signing fallback payloads.
     pub builder_bls_private_key: BLSSecretKey,
-    /// Path to the delegations file.
-    pub delegations_path: Option<PathBuf>,
     /// Gateway contract address
     pub gateway_contract: Address,
     /// Web3Signer settings
@@ -68,18 +62,15 @@ impl Default for Config {
             commitment_port: DEFAULT_COMMITMENT_PORT,
             builder_port: DEFAULT_MEV_BOOST_PROXY_PORT,
             metrics_port: DEFAULT_METRICS_PORT,
-            collector_url: "http://localhost:3030".parse().expect("Valid URL"),
+            cb_url: "http://localhost:3030".parse().expect("Valid URL"),
             sidecar_info_sender_url: "http://localhost:8000".parse().expect("Valid URL"),
             beacon_api_url: "http://localhost:5052".parse().expect("Valid URL"),
             execution_api_url: "http://localhost:8545".parse().expect("Valid URL"),
             engine_api_url: "http://localhost:8551".parse().expect("Valid URL"),
-            validator_indexes: ValidatorIndexes::default(),
             chain: ChainConfig::default(),
             jwt_hex: String::new(),
             fee_recipient: Address::ZERO,
             builder_bls_private_key: random_bls_secret(),
-            collector_ws: String::new(),
-            delegations_path: None,
             gateway_contract: Address::from_str("0x8aC112a5540f441cC9beBcC647041A6E0D595B94")
                 .unwrap(),
             web3signer_url: String::new(),
@@ -93,9 +84,6 @@ impl Default for Config {
 
 impl Config {
     pub fn new(envs: HashMap<String, String>) -> Self {
-        // ,&envs["BUILDER_PORT"],&envs["collector_url"],&envs["BEACON_API_URL"], &envs["PRIVATE_KEY"], &envs["JWT_HEX"], &envs["VALIDATOR_INDEXES"], , &envs["COMMITMENT_DEADLINE"], &envs["SLOT_TIME"]
-        let validators = ValidatorIndexes::from_str(&envs["VALIDATOR_INDEXES"].as_str()).unwrap();
-
         let chain = ChainConfig {
             chain: match envs["CHAIN"].clone().as_str() {
                 "kurtosis" => Chain::Kurtosis,
@@ -115,24 +103,15 @@ impl Config {
             commitment_port: envs["COMMITMENT_PORT"].parse().unwrap(),
             metrics_port: envs["METRICS_PORT"].parse().unwrap(),
             builder_port: envs["BUILDER_PORT"].parse().unwrap(),
-            collector_url: envs["COLLECTOR_URL"].parse().expect("Valid URL"),
-            collector_ws: envs["COLLECTOR_SOCKET"].parse().expect("Valid URL"),
+            cb_url: envs["CB_URL"].parse().expect("Valid URL"),
             sidecar_info_sender_url: envs["SIDECAR_INFO_SENDER_URL"].parse().expect("Valid URL"),
             beacon_api_url: envs["BEACON_API_URL"].parse().expect("Valid URL"),
             execution_api_url: envs["EXECUTION_API_URL"].parse().expect("Valid URL"),
             engine_api_url: envs["ENGINE_API_URL"].parse().expect("Valid URL"),
-            validator_indexes: validators,
             chain: chain,
             jwt_hex: envs["JWT"].clone(),
             fee_recipient: Address::parse_checksummed(&envs["FEE_RECIPIENT"], None).unwrap(),
             builder_bls_private_key: random_bls_secret(),
-            delegations_path: {
-                if envs["DELEGATIONS_PATH"].len() > 0 {
-                    Some(PathBuf::from(envs["DELEGATIONS_PATH"].as_str()))
-                } else {
-                    None
-                }
-            },
             gateway_contract: envs["GATEWAY_CONTRACT"].parse().unwrap(),
             web3signer_url: envs["WEB3SIGNER_URL"].parse().unwrap(),
             ca_cert_path: envs["CA_CERT_PATH"].parse().unwrap(),
@@ -162,7 +141,7 @@ mod tests {
         assert_eq!(default_config.commitment_port, DEFAULT_COMMITMENT_PORT);
         assert_eq!(default_config.builder_port, DEFAULT_MEV_BOOST_PROXY_PORT);
         assert_eq!(
-            default_config.collector_url.as_str(),
+            default_config.cb_url.as_str(),
             "http://localhost:3030/"
         );
         assert_eq!(
@@ -179,7 +158,6 @@ mod tests {
         );
         assert!(default_config.jwt_hex.is_empty());
         assert_eq!(default_config.fee_recipient, Address::ZERO);
-        assert!(default_config.collector_ws.is_empty());
     }
 
     #[test]
@@ -189,7 +167,7 @@ mod tests {
         envs.insert("BUILDER_PORT".to_string(), "18552".to_string());
         envs.insert("METRICS_PORT".to_string(), "8018".to_string());
         envs.insert(
-            "COLLECTOR_URL".to_string(),
+            "CB_URL".to_string(),
             "http://localhost:4000".to_string(),
         );
         envs.insert(
@@ -208,7 +186,6 @@ mod tests {
             "ENGINE_API_URL".to_string(),
             "http://localhost:8000".to_string(),
         );
-        envs.insert("VALIDATOR_INDEXES".to_string(), "0,1,2".to_string());
         envs.insert("CHAIN".to_string(), "kurtosis".to_string());
         envs.insert("COMMITMENT_DEADLINE".to_string(), "12".to_string());
         envs.insert("SLOT_TIME".to_string(), "10".to_string());
@@ -216,10 +193,6 @@ mod tests {
         envs.insert(
             "FEE_RECIPIENT".to_string(),
             "0x0000000000000000000000000000000000000001".to_string(),
-        );
-        envs.insert(
-            "DELEGATIONS_PATH".to_string(),
-            "/work/proposer-commitment-network/sidecar/delegations/delegations.json".to_string(),
         );
         envs.insert(
             "GATEWAY_CONTRACT".to_string(),
@@ -231,8 +204,7 @@ mod tests {
         assert_eq!(config.commitment_port, 8001);
         assert_eq!(config.builder_port, 18552);
         assert_eq!(config.metrics_port, 8018);
-        assert_eq!(config.collector_url.as_str(), "http://localhost:4000/");
-        assert_eq!(config.collector_ws, "ws://localhost:4001");
+        assert_eq!(config.cb_url.as_str(), "http://localhost:4000/");
         assert_eq!(config.beacon_api_url.as_str(), "http://localhost:6000/");
         assert_eq!(config.execution_api_url.as_str(), "http://localhost:7000/");
         assert_eq!(config.engine_api_url.as_str(), "http://localhost:8000/");
