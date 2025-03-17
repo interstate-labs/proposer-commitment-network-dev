@@ -1,0 +1,42 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.appName }}-sidecar-config
+  labels:
+    app.kubernetes.io/name: {{ .Values.appName }}
+    app.kubernetes.io/component: sidecar
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  {{- if .Values.sidecar.annotations }}
+  annotations:
+    {{- toYaml .Values.sidecar.annotations | nindent 4 }}
+  {{- end }}
+data:
+  .env: |
+    RUST_LOG={{ .Values.sidecar.env.rustLog | default "debug" }}
+    RUST_BACKTRACE={{ .Values.sidecar.env.rustBacktrace | default "1" }}
+    COMMITMENT_PORT={{ .Values.sidecar.env.commitmentPort | default "9061" }}
+    METRICS_PORT={{ .Values.sidecar.env.metricsPort | default "8018" }}
+    CHAIN={{ .Values.sidecar.env.chain | default "kurtosis" }}
+    BEACON_API_URL={{ .Values.sidecar.env.beaconApiUrl }}
+    EXECUTION_API_URL={{ .Values.sidecar.env.executionApiUrl }}
+    ENGINE_API_URL={{ .Values.sidecar.env.engineApiUrl }}
+    CB_URL={{ .Values.sidecar.env.cbUrl | default (printf "http://%s-cb:%s" .Values.appName .Values.cb.port) }}
+    BUILDER_PORT={{ .Values.sidecar.env.builderPort | default "9062" }}
+    JWT={{ .Values.sidecar.env.jwt }}
+    SLOT_TIME={{ .Values.sidecar.env.slotTime | default "2" }}
+    COMMITMENT_DEADLINE={{ .Values.sidecar.env.commitmentDeadline | default "100" }}
+    FEE_RECIPIENT={{ .Values.sidecar.env.feeRecipient }}
+    GATEWAY_CONTRACT={{ .Values.sidecar.env.gatewayContract }}
+    WEB3SIGNER_URL={{ .Values.sidecar.env.web3SignerUrl }}
+    CA_CERT_PATH={{ .Values.sidecar.env.caCertPath }}
+    CLIENT_COMBINED_PEM_PATH={{ .Values.sidecar.env.clientCombinedPemPath }}
+    SIDECAR_INFO_SENDER_URL={{ .Values.sidecar.env.sidecarInfoSenderUrl }}
+    COMMIT_BOOST_SIGNER_URL={{ .Values.sidecar.env.commitBoostSignerUrl }}
+    {{- if .Values.sidecar.deployment.extraEnv }}
+    {{- range .Values.sidecar.deployment.extraEnv }}
+    {{ .name }}={{ .value }}
+    {{- end }}
+    {{- end }}

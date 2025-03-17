@@ -1,0 +1,89 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}-sidecar
+  labels:
+    app.kubernetes.io/name: {{ .Values.appName }}
+    app.kubernetes.io/component: sidecar
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  {{- if .Values.sidecar.deployment.annotations }}
+  annotations:
+    {{- toYaml .Values.sidecar.deployment.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.sidecar.deployment.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.appName }}-sidecar
+      app.kubernetes.io/component: sidecar
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  strategy:
+    type: {{ .Values.sidecar.deployment.updateStrategy.type | default "RollingUpdate" }}
+    {{- if eq (.Values.sidecar.deployment.updateStrategy.type | default "RollingUpdate") "RollingUpdate" }}
+    rollingUpdate:
+      maxSurge: {{ .Values.sidecar.deployment.updateStrategy.maxSurge | default 1 }}
+      maxUnavailable: {{ .Values.sidecar.deployment.updateStrategy.maxUnavailable | default 0 }}
+    {{- end }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.appName }}-sidecar
+        app.kubernetes.io/component: sidecar
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- if .Values.sidecar.deployment.podLabels }}
+        {{- toYaml .Values.sidecar.deployment.podLabels | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- if .Values.sidecar.deployment.podAnnotations }}
+        {{- toYaml .Values.sidecar.deployment.podAnnotations | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- if .Values.sidecar.deployment.affinity }}
+      affinity:
+        {{- toYaml .Values.sidecar.deployment.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.sidecar.deployment.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.sidecar.deployment.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.sidecar.deployment.tolerations }}
+      tolerations:
+        {{- toYaml .Values.sidecar.deployment.tolerations | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.sidecar.deployment.terminationGracePeriodSeconds | default 30 }}
+      securityContext:
+        {{- toYaml .Values.sidecar.deployment.podSecurityContext | nindent 8 }}
+      containers:
+        - name: interstate-sidecar
+          image: "{{ .Values.sidecar.image.repository }}:{{ .Values.sidecar.image.tag | default "latest" }}"
+          imagePullPolicy: {{ .Values.sidecar.image.pullPolicy | default "Always" }}
+          securityContext:
+            {{- toYaml .Values.sidecar.deployment.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: commitment
+              containerPort: {{ .Values.sidecar.env.commitmentPort | default 9061 }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.sidecar.env.metricsPort | default 8018 }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.sidecar.deployment.resources | nindent 12 }}
+          {{- if .Values.sidecar.deployment.livenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.sidecar.deployment.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.sidecar.deployment.readinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.sidecar.deployment.readinessProbe | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: sidecar-config
+              mountPath: /app/.env
+              subPath: .env
+      volumes:
+        - name: sidecar-config
+          configMap:
+            name: {{ .Values.appName }}-sidecar-config

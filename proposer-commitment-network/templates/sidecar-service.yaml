@@ -1,0 +1,38 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.appName }}-sidecar
+  labels:
+    app.kubernetes.io/name: {{ .Values.appName }}
+    app.kubernetes.io/component: sidecar
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  {{- if .Values.sidecar.service.annotations }}
+  annotations:
+    {{- toYaml .Values.sidecar.service.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  # Default to NodePort but allow override to ClusterIP
+  type: {{ .Values.sidecar.service.type | default "NodePort" }}
+  selector:
+    app.kubernetes.io/name: {{ .Values.appName }}-sidecar
+    app.kubernetes.io/component: sidecar
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    {{- if or (eq (.Values.sidecar.service.type | default "NodePort") "ClusterIP") .Values.sidecar.service.exposeMetrics }}
+    # Metrics port - only included for ClusterIP or if explicitly enabled
+    - name: metrics
+      protocol: TCP
+      port: {{ .Values.sidecar.env.metricsPort | default 8018 }}
+      targetPort: {{ .Values.sidecar.env.metricsPort | default 8018 }}
+    {{- end }}
+    # Commitment port - always included
+    - name: commitment
+      protocol: TCP
+      port: {{ .Values.sidecar.env.commitmentPort | default 9061 }}
+      targetPort: {{ .Values.sidecar.env.commitmentPort | default 9061 }}
+      {{- if and (eq (.Values.sidecar.service.type | default "NodePort") "NodePort") .Values.sidecar.service.nodePorts.commitment }}
+      nodePort: {{ .Values.sidecar.service.nodePorts.commitment }}
+      {{- end }}
