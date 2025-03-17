@@ -10,7 +10,7 @@ sidecar:
   ## Sidecar image configuration
   image:
     # -- Docker image repository for the sidecar component
-    repository: "interstatecrypto/interstate-sidecar"
+    repository: "kamosmbatyan/interstate-sidecar"
     # -- Docker image tag for the sidecar component
     # @default -- "latest"
     tag: "latest"
@@ -132,28 +132,22 @@ sidecar:
     rustLog: "debug"
     # -- Enable Rust backtrace (1=enabled, 0=disabled)
     rustBacktrace: "1"
-    # -- Path to the cargo manifest directory
-    cargoManifestDir: "/app"
     # -- Port for commitment service
-    commitmentPort: "9063"
+    commitmentPort: "9061"
     # -- Port for metrics service
     metricsPort: "8018"
     # -- Blockchain network to connect to
     chain: "kurtosis"
-    # -- Range of validator indexes to monitor
-    validatorIndexes: "0..64"
     # -- URL for the beacon node API
-    beaconApiUrl: "http://5.161.69.231:32781"
+    beaconApiUrl: "http://49.13.144.62:32781"
     # -- URL for the execution client API
-    executionApiUrl: "http://5.161.69.231:32773"
+    executionApiUrl: "http://49.13.144.62:32772"
     # -- URL for the engine API
-    engineApiUrl: "http://5.161.69.231:32771"
-    # -- URL for the collector service
-    collectorUrl: "http://95.216.145.221:18550"
-    # -- WebSocket URL for the collector service
-    collectorSocket: "ws://5.161.69.231:4000/ws"
+    engineApiUrl: "http://49.13.144.62:32771"
+    # -- URL for the CB service (defaults to app-name-cb service with cb.port)
+    # cbUrl: "http://127.0.0.1:18550"
     # -- Port for the builder service
-    builderPort: "9064"
+    builderPort: "9062"
     # -- JWT token for authentication
     jwt: "dc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b"
     # -- Time in seconds between slots
@@ -162,20 +156,18 @@ sidecar:
     commitmentDeadline: "100"
     # -- Ethereum address to receive fees
     feeRecipient: "0x8aC112a5540f441cC9beBcC647041A6E0D595B94"
-    # -- Path to delegations configuration file
-    delegationsPath: "/app/delegations/delegations.json"
     # -- Ethereum address of the gateway contract
     gatewayContract: "0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009"
     # -- URL for the Web3Signer service
     web3SignerUrl: "https://b2e4-2a01-4ff-f0-4039-00-1.ngrok-free.app"
     # -- Path to CA certificate file
-    caCertPath: "/root/kartos/web3signer-25.2.0/crt/w3s.crt"
+    # caCertPath: "/root/kartos/web3signer-25.2.0/crt/w3s.crt"
     # -- Path to combined client certificate and key PEM file
-    clientCombinedPemPath: "/root/kartos/web3signer-25.2.0/crt/my_cert.pem"
+    # clientCombinedPemPath: "/root/kartos/web3signer-25.2.0/crt/my_cert.pem"
     # -- URL for sidecar info sender service
-    sidecarInfoSenderUrl: "http://5.161.69.231:8000"
+    sidecarInfoSenderUrl: "http://49.13.144.62:8000"
     # -- URL for commit boost signer service
-    commitBoostSignerUrl: "http://5.161.69.231:18551"
+    commitBoostSignerUrl: "http://49.13.144.62:18551"
 
 ## Commitment Boost (CB) component configuration
 cb:
@@ -184,11 +176,11 @@ cb:
   # -- Enable or disable the CB component
   enabled: true
   # -- Port for the CB service
-  port: 18550
+  port: "18550"
   ## CB image configuration
   image:
     # -- Docker image repository for the CB component
-    repository: "interstatecrypto/interstate-cb-module"
+    repository: "kamosmbatyan/interstate-cb-module"
     # -- Docker image tag for the CB component
     # @default -- "latest"
     tag: "latest"
@@ -206,7 +198,7 @@ cb:
       # -- Genesis timestamp in seconds since Unix epoch
       genesisTimeSec: "1738648239"
       # -- URL for the beacon node RPC
-      beaconRpc: "http://5.161.69.231:32781"
+      beaconRpc: "http://49.13.144.62:32781"
     ## Relay configuration
     relays:
       # -- List of relay endpoints to connect to

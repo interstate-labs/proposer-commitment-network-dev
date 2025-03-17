@@ -59,12 +59,12 @@ spec:
       containers:
         - name: interstate-sidecar
           image: "{{ .Values.sidecar.image.repository }}:{{ .Values.sidecar.image.tag | default "latest" }}"
-          imagePullPolicy: {{ .Values.sidecar.image.pullPolicy | default "IfNotPresent" }}
+          imagePullPolicy: {{ .Values.sidecar.image.pullPolicy | default "Always" }}
           securityContext:
             {{- toYaml .Values.sidecar.deployment.containerSecurityContext | nindent 12 }}
           ports:
             - name: commitment
-              containerPort: {{ .Values.sidecar.env.commitmentPort | default 9063 }}
+              containerPort: {{ .Values.sidecar.env.commitmentPort | default 9061 }}
               protocol: TCP
             - name: metrics
               containerPort: {{ .Values.sidecar.env.metricsPort | default 8018 }}
@@ -83,35 +83,7 @@ spec:
             - name: sidecar-config
               mountPath: /app/.env
               subPath: .env
-            - name: delegations-config
-              mountPath: /app/delegations
       volumes:
         - name: sidecar-config
           configMap:
             name: {{ .Values.appName }}-sidecar-config
-        - name: delegations-config
-          configMap:
-            name: {{ .Values.appName }}-delegations-config
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ .Values.appName }}-delegations-config
-  labels:
-    app.kubernetes.io/name: {{ .Values.appName }}
-    app.kubernetes.io/component: sidecar
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-data:
-  delegations.json: |
-    [
-      {
-        "message": {
-          "action": 0,
-          "validator_pubkey": "0xa1d9840eda3036fbf63eeea40146e4548553e6e1b2a653ab349b376f31b367c40d71fb59ff8e94b91daa99c262ec8b52",
-          "delegatee_pubkey": "0x83eeddfac5e60f8fe607ee8713efb8877c295ad9f8ca075f4d8f6f2ae241a30dd57f78f6f3863a9fe0d5b5db9d550b93"
-        },
-        "signature": "0x8adbde1e7359ef9b10031e638802da1760b9c51759b67ce868e0b6ba37f5d9fc6d2a25fd9ad01071b3f6027c00f1e7f40ab8736a31fb611cfe3ff9fa43ea9fd666620fbce8eba5ac88aea3653d844d608494043e61deb1b0b62836fdd7471b87"
-      }
-    ]

@@ -17,7 +17,7 @@ spec:
   # Default to NodePort but allow override to ClusterIP
   type: {{ .Values.sidecar.service.type | default "NodePort" }}
   selector:
-    app.kubernetes.io/name: {{ .Values.appName }}
+    app.kubernetes.io/name: {{ .Values.appName }}-sidecar
     app.kubernetes.io/component: sidecar
     app.kubernetes.io/instance: {{ .Release.Name }}
   ports:
@@ -25,14 +25,14 @@ spec:
     # Metrics port - only included for ClusterIP or if explicitly enabled
     - name: metrics
       protocol: TCP
-      port: 9090
-      targetPort: 9090
+      port: {{ .Values.sidecar.env.metricsPort | default 8018 }}
+      targetPort: {{ .Values.sidecar.env.metricsPort | default 8018 }}
     {{- end }}
     # Commitment port - always included
     - name: commitment
       protocol: TCP
-      port: 9063
-      targetPort: 9063
+      port: {{ .Values.sidecar.env.commitmentPort | default 9061 }}
+      targetPort: {{ .Values.sidecar.env.commitmentPort | default 9061 }}
       {{- if and (eq (.Values.sidecar.service.type | default "NodePort") "NodePort") .Values.sidecar.service.nodePorts.commitment }}
       nodePort: {{ .Values.sidecar.service.nodePorts.commitment }}
       {{- end }}
