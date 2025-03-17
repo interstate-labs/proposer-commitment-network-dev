@@ -276,19 +276,16 @@ impl Constraint {
 pub struct CommitBoostApi {
     url: Url,
     client: Client,
-    delegations: Vec<SignedDelegationMessage>,
 }
 
 impl CommitBoostApi {
-    pub fn new(url: Url, delegations_messages: &Vec<SignedDelegationMessage>) -> Self {
+    pub fn new(url: Url) -> Self {
         Self {
             url,
             client: ClientBuilder::new()
                 .user_agent("interstate-cb-module")
                 .build()
-                .unwrap(),
-            delegations: delegations_messages.clone(),
-        }
+                .unwrap()        }
     }
 
     pub fn get_constraints_signer(
@@ -327,30 +324,6 @@ impl CommitBoostApi {
             let error = response.json::<ErrorResponse>().await?;
             return Err(CommitBoostError::FailedRegisteringValidators(error));
         }
-
-        if self.delegations.is_empty() {
-            return Ok(());
-        } else {
-            let validator_pubkeys = registrations
-                .iter()
-                .map(|r| &r.message.public_key)
-                .collect::<HashSet<_>>();
-
-            let filtered_delegations = self
-                .delegations
-                .iter()
-                .filter(|d| validator_pubkeys.contains(&d.message.validator_pubkey))
-                .cloned()
-                .collect::<Vec<_>>();
-
-            if let Err(err) = self.delegate(&filtered_delegations).await {
-                tracing::error!(
-                    ?err,
-                    "Failed to propagate delegations during validator registration"
-                );
-            }
-        }
-
         Ok(())
     }
 

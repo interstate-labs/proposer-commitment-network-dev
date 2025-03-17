@@ -250,7 +250,6 @@ async fn main() {
     // let mut constraint_state = Arc::new(RwLock::new(ConstraintState::new( beacon_client.clone(), config.validator_indexes.clone(), config.chain.get_commitment_deadline_duration()))) ;
     let constraint_state = ConstraintState::new(
         beacon_client.clone(),
-        config.validator_indexes.clone(),
         config.chain.get_commitment_deadline_duration(),
         ExecutionState::new(client_state, LimitOptions::default(), DEFAULT_GAS_LIMIT)
             .await
