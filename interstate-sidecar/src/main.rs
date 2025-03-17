@@ -114,12 +114,11 @@ async fn handle_preconfirmation_request(
                 let cbs_message = ConstraintsMessage::from_tx(cbs_pubkey, slot, tx.clone());
                 let cbs_digest = format!("0x{}", &hex::encode(cbs_message.digest()));
                 let cbs_signature = signer.request_signature(&pubkey_str, &cbs_digest).await;
-
                 let signed_constraints = match cbs_signature {
                     Ok(signature) => {
                         let mut bytes_array = [0u8; 96];
                         let bytes =
-                            hex::decode(signature.trim_start_matches("0x")).unwrap_or_default();
+                            hex::decode(signature.trim_matches('"').trim_start_matches("0x")).unwrap_or_default();
                         bytes_array[..bytes.len()].copy_from_slice(&bytes);
                         SignedConstraints {
                             message: cbs_message,
@@ -135,7 +134,6 @@ async fn handle_preconfirmation_request(
 
                 constraint_state.add_constraint(slot, signed_constraints.clone());
                 signed_contraints_list.push(signed_constraints.clone());
-
                 // match commit_boost_api.send_constraints_to_be_collected(&vec![signed_constraints.clone()]).await {
                 //     Ok(_) => tracing::info!(?signed_constraints,"Sent constratins successfully to be collected."),
                 //     Err(err) => tracing::error!(err = ?err, "Error sending constraints to be collected")
@@ -309,7 +307,7 @@ async fn main() {
         let mut cb_signer = CBSigner::new(commit_boost_signer_url, jwt);
         signer = Arc::new(cb_signer);
     }
-    
+
     let accounts = signer
             .list_accounts()
             .await
