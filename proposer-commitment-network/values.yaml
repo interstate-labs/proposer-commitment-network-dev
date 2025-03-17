@@ -139,7 +139,7 @@ sidecar:
     # -- Blockchain network to connect to
     chain: "kurtosis"
     # -- URL for the beacon node API
-    beaconApiUrl: "http://49.13.144.62:32781"
+    beaconApiUrl: "http://49.13.144.62:32782"
     # -- URL for the execution client API
     executionApiUrl: "http://49.13.144.62:32772"
     # -- URL for the engine API
