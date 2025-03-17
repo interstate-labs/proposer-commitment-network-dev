@@ -5,7 +5,7 @@ port = 18550
 host = "0.0.0.0"
 
 genesis_time_sec=1738648239
-beacon_rpc="http://95.216.14.221:32780"
+beacon_rpc="http://5.161.69.231:32781"
 [[relays]]
 url = "https://0x821f2a65afb70e7f2e820a925a9b4c80a159620582c1766b1b09729fec178b11ea22abb3a51f07b288be815a1a2ff516@bloxroute.holesky.blxrbdn.com"
 

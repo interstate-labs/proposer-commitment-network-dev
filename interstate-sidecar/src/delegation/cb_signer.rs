@@ -90,7 +90,7 @@ impl CBSigner {
         &self,
         pub_key: &str,
         object_root: &str,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    ) -> Result<String> {
         let url = self.full_url("/signer/v1/request_signature");
         let jwt = self.jwt_token.lock().await;
         let mut headers = HeaderMap::new();
