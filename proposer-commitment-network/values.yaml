@@ -161,9 +161,9 @@ sidecar:
     # -- URL for the Web3Signer service
     web3SignerUrl: "https://b2e4-2a01-4ff-f0-4039-00-1.ngrok-free.app"
     # -- Path to CA certificate file
-    # caCertPath: "/root/kartos/web3signer-25.2.0/crt/w3s.crt"
+    # caCertPath: "/path/to/your/cert.crt"
     # -- Path to combined client certificate and key PEM file
-    # clientCombinedPemPath: "/root/kartos/web3signer-25.2.0/crt/my_cert.pem"
+    # clientCombinedPemPath: "/path/to/your/cert.pem"
     # -- URL for sidecar info sender service
     sidecarInfoSenderUrl: "http://49.13.144.62:8000"
     # -- URL for commit boost signer service

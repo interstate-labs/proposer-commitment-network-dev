@@ -15,7 +15,7 @@ A Helm chart for Interstate commit-boost and sidecar components
 | cb.config.logs.logLevel | string | `"debug"` | Log level (debug, info, warn, error) |
 | cb.config.logs.maxLogFiles | int | `30` | Maximum number of log files to retain |
 | cb.config.metrics.prometheusConfig | string | `"./prometheus.yml"` | Path to Prometheus configuration file |
-| cb.config.pbs.beaconRpc | string | `"http://5.161.69.231:32781"` | URL for the beacon node RPC |
+| cb.config.pbs.beaconRpc | string | `"http://49.13.144.62:32781"` | URL for the beacon node RPC |
 | cb.config.pbs.genesisTimeSec | string | `"1738648239"` | Genesis timestamp in seconds since Unix epoch |
 | cb.config.pbs.host | string | `"0.0.0.0"` | Host address to bind to |
 | cb.config.relays[0] | object | `{"url":"https://0x821f2a65afb70e7f2e820a925a9b4c80a159620582c1766b1b09729fec178b11ea22abb3a51f07b288be815a1a2ff516@bloxroute.holesky.blxrbdn.com"}` | List of relay endpoints to connect to |
@@ -43,10 +43,10 @@ A Helm chart for Interstate commit-boost and sidecar components
 | cb.deployment.updateStrategy.type | string | `"RollingUpdate"` | Type of update strategy (RollingUpdate or Recreate) |
 | cb.enabled | bool | `true` | Enable or disable the CB component |
 | cb.image.pullPolicy | string | "IfNotPresent" | Image pull policy |
-| cb.image.repository | string | `"interstatecrypto/interstate-cb-module"` | Docker image repository for the CB component |
+| cb.image.repository | string | `"kamosmbatyan/interstate-cb-module"` | Docker image repository for the CB component |
 | cb.image.tag | string | "latest" | Docker image tag for the CB component |
-| cb.port | int | `18550` | Port for the CB service |
-| sidecar | object | `{"deployment":{"containerSecurityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}},"livenessProbe":{"httpGet":{"path":"/health","port":"metrics"},"initialDelaySeconds":30,"periodSeconds":10},"podSecurityContext":{"fsGroup":1000,"runAsNonRoot":true,"runAsUser":1000},"readinessProbe":{"httpGet":{"path":"/ready","port":"metrics"},"initialDelaySeconds":5,"periodSeconds":10},"replicas":1,"resources":{"limits":{"cpu":"1000m","memory":"1Gi"},"requests":{"cpu":"200m","memory":"256Mi"}},"terminationGracePeriodSeconds":30,"updateStrategy":{"maxSurge":1,"maxUnavailable":0,"type":"RollingUpdate"}},"enabled":true,"env":{"beaconApiUrl":"http://5.161.69.231:32781","builderPort":"9064","caCertPath":"/root/kartos/web3signer-25.2.0/crt/w3s.crt","cargoManifestDir":"/app","chain":"kurtosis","clientCombinedPemPath":"/root/kartos/web3signer-25.2.0/crt/my_cert.pem","collectorSocket":"ws://5.161.69.231:4000/ws","collectorUrl":"http://95.216.145.221:18550","commitBoostSignerUrl":"http://5.161.69.231:18551","commitmentDeadline":"100","commitmentPort":"9063","delegationsPath":"/app/delegations/delegations.json","engineApiUrl":"http://5.161.69.231:32771","executionApiUrl":"http://5.161.69.231:32773","feeRecipient":"0x8aC112a5540f441cC9beBcC647041A6E0D595B94","gatewayContract":"0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009","jwt":"dc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b","metricsPort":"8018","rustBacktrace":"1","rustLog":"debug","sidecarInfoSenderUrl":"http://5.161.69.231:8000","slotTime":"2","validatorIndexes":"0..64","web3SignerUrl":"https://b2e4-2a01-4ff-f0-4039-00-1.ngrok-free.app"},"image":{"pullPolicy":"IfNotPresent","repository":"interstatecrypto/interstate-sidecar","tag":"latest"},"ingress":{"annotations":{"kubernetes.io/ingress.class":"nginx","nginx.ingress.kubernetes.io/rewrite-target":"/"},"className":"nginx","enabled":false,"hosts":[{"host":null,"paths":[{"path":"/","pathType":"Prefix","serviceName":"commitment"}]}],"tls":[{"hosts":null,"secretName":"sidecar-tls-secret"}]},"service":{"annotations":{},"exposeMetrics":false,"nodePorts":{"commitment":null},"type":"NodePort"}}` | Enable or disable the sidecar component |
+| cb.port | string | `"18550"` | Port for the CB service |
+| sidecar | object | `{"deployment":{"containerSecurityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}},"livenessProbe":{"httpGet":{"path":"/health","port":"metrics"},"initialDelaySeconds":30,"periodSeconds":10},"podSecurityContext":{"fsGroup":1000,"runAsNonRoot":true,"runAsUser":1000},"readinessProbe":{"httpGet":{"path":"/ready","port":"metrics"},"initialDelaySeconds":5,"periodSeconds":10},"replicas":1,"resources":{"limits":{"cpu":"1000m","memory":"1Gi"},"requests":{"cpu":"200m","memory":"256Mi"}},"terminationGracePeriodSeconds":30,"updateStrategy":{"maxSurge":1,"maxUnavailable":0,"type":"RollingUpdate"}},"enabled":true,"env":{"beaconApiUrl":"http://49.13.144.62:32782","builderPort":"9062","chain":"kurtosis","commitBoostSignerUrl":"http://49.13.144.62:18551","commitmentDeadline":"100","commitmentPort":"9061","engineApiUrl":"http://49.13.144.62:32771","executionApiUrl":"http://49.13.144.62:32772","feeRecipient":"0x8aC112a5540f441cC9beBcC647041A6E0D595B94","gatewayContract":"0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009","jwt":"dc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b","metricsPort":"8018","rustBacktrace":"1","rustLog":"debug","sidecarInfoSenderUrl":"http://49.13.144.62:8000","slotTime":"2","web3SignerUrl":"https://b2e4-2a01-4ff-f0-4039-00-1.ngrok-free.app"},"image":{"pullPolicy":"IfNotPresent","repository":"kamosmbatyan/interstate-sidecar","tag":"latest"},"ingress":{"annotations":{"kubernetes.io/ingress.class":"nginx","nginx.ingress.kubernetes.io/rewrite-target":"/"},"className":"nginx","enabled":false,"hosts":[{"host":null,"paths":[{"path":"/","pathType":"Prefix","serviceName":"commitment"}]}],"tls":[{"hosts":null,"secretName":"sidecar-tls-secret"}]},"service":{"annotations":{},"exposeMetrics":false,"nodePorts":{"commitment":null},"type":"NodePort"}}` | Enable or disable the sidecar component |
 | sidecar.deployment.containerSecurityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` | Security context for the container |
 | sidecar.deployment.containerSecurityContext.allowPrivilegeEscalation | bool | `false` | Prevent privilege escalation |
 | sidecar.deployment.containerSecurityContext.capabilities.drop | list | `["ALL"]` | Drop all Linux capabilities for security |
@@ -75,32 +75,25 @@ A Helm chart for Interstate commit-boost and sidecar components
 | sidecar.deployment.updateStrategy.maxSurge | int | `1` | Maximum number of pods that can be created over the desired number of pods |
 | sidecar.deployment.updateStrategy.maxUnavailable | int | `0` | Maximum number of pods that can be unavailable during the update |
 | sidecar.deployment.updateStrategy.type | string | `"RollingUpdate"` | Type of update strategy (RollingUpdate or Recreate) |
-| sidecar.env.beaconApiUrl | string | `"http://5.161.69.231:32781"` | URL for the beacon node API |
-| sidecar.env.builderPort | string | `"9064"` | Port for the builder service |
-| sidecar.env.caCertPath | string | `"/root/kartos/web3signer-25.2.0/crt/w3s.crt"` | Path to CA certificate file |
-| sidecar.env.cargoManifestDir | string | `"/app"` | Path to the cargo manifest directory |
+| sidecar.env.beaconApiUrl | string | `"http://49.13.144.62:32782"` | URL for the beacon node API |
+| sidecar.env.builderPort | string | `"9062"` | Port for the builder service |
 | sidecar.env.chain | string | `"kurtosis"` | Blockchain network to connect to |
-| sidecar.env.clientCombinedPemPath | string | `"/root/kartos/web3signer-25.2.0/crt/my_cert.pem"` | Path to combined client certificate and key PEM file |
-| sidecar.env.collectorSocket | string | `"ws://5.161.69.231:4000/ws"` | WebSocket URL for the collector service |
-| sidecar.env.collectorUrl | string | `"http://95.216.145.221:18550"` | URL for the collector service |
-| sidecar.env.commitBoostSignerUrl | string | `"http://5.161.69.231:18551"` | URL for commit boost signer service |
+| sidecar.env.commitBoostSignerUrl | string | `"http://49.13.144.62:18551"` | URL for commit boost signer service |
 | sidecar.env.commitmentDeadline | string | `"100"` | Deadline for commitments in milliseconds |
-| sidecar.env.commitmentPort | string | `"9063"` | Port for commitment service |
-| sidecar.env.delegationsPath | string | `"/app/delegations/delegations.json"` | Path to delegations configuration file |
-| sidecar.env.engineApiUrl | string | `"http://5.161.69.231:32771"` | URL for the engine API |
-| sidecar.env.executionApiUrl | string | `"http://5.161.69.231:32773"` | URL for the execution client API |
+| sidecar.env.commitmentPort | string | `"9061"` | Port for commitment service |
+| sidecar.env.engineApiUrl | string | `"http://49.13.144.62:32771"` | URL for the engine API |
+| sidecar.env.executionApiUrl | string | `"http://49.13.144.62:32772"` | URL for the execution client API |
 | sidecar.env.feeRecipient | string | `"0x8aC112a5540f441cC9beBcC647041A6E0D595B94"` | Ethereum address to receive fees |
 | sidecar.env.gatewayContract | string | `"0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009"` | Ethereum address of the gateway contract |
 | sidecar.env.jwt | string | `"dc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b"` | JWT token for authentication |
 | sidecar.env.metricsPort | string | `"8018"` | Port for metrics service |
 | sidecar.env.rustBacktrace | string | `"1"` | Enable Rust backtrace (1=enabled, 0=disabled) |
 | sidecar.env.rustLog | string | `"debug"` | Rust logging level |
-| sidecar.env.sidecarInfoSenderUrl | string | `"http://5.161.69.231:8000"` | URL for sidecar info sender service |
+| sidecar.env.sidecarInfoSenderUrl | string | `"http://49.13.144.62:8000"` | URL for sidecar info sender service |
 | sidecar.env.slotTime | string | `"2"` | Time in seconds between slots |
-| sidecar.env.validatorIndexes | string | `"0..64"` | Range of validator indexes to monitor |
 | sidecar.env.web3SignerUrl | string | `"https://b2e4-2a01-4ff-f0-4039-00-1.ngrok-free.app"` | URL for the Web3Signer service |
 | sidecar.image.pullPolicy | string | "IfNotPresent" | Image pull policy |
-| sidecar.image.repository | string | `"interstatecrypto/interstate-sidecar"` | Docker image repository for the sidecar component |
+| sidecar.image.repository | string | `"kamosmbatyan/interstate-sidecar"` | Docker image repository for the sidecar component |
 | sidecar.image.tag | string | "latest" | Docker image tag for the sidecar component |
 | sidecar.ingress.annotations | object | `{"kubernetes.io/ingress.class":"nginx","nginx.ingress.kubernetes.io/rewrite-target":"/"}` | Additional annotations for the ingress |
 | sidecar.ingress.className | string | `"nginx"` | Ingress class name to use |
