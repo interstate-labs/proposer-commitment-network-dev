@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-    - [Helm](https://helm.sh/docs/intro/install/)
+[Helm](https://helm.sh/docs/intro/install/)
 
 ## Quickstart
 
