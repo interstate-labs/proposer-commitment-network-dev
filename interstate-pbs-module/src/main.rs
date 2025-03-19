@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let chain = pbs_config.chain;
-    tracing::info!(?chain, "Starting interstate-cb-module with relays below:");
+    tracing::info!(?chain, "Starting interstate-pbs-module with relays below:");
 
     for relay in &pbs_config.relays {
         tracing::info!("ID: {} - URI: {}", relay.id, relay.config.entry.url);
