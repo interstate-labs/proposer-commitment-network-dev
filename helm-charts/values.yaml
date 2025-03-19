@@ -1,283 +1,238 @@
----
-## Global application configuration
-# -- The name of the application, used as a prefix for component names
-appName: proposer-commitment-network
+nameOverride: "interstate-boost"
 
-## Sidecar component configuration
-# -- Enable or disable the sidecar component
-sidecar:
+replicaCount: 1
+
+image:
+  repository: kamosmbatyan/interstate-cb-module
+  pullPolicy: Always
+  tag: "latest"
+
+deployment:
   enabled: true
-  ## Sidecar image configuration
-  image:
-    # -- Docker image repository for the sidecar component
-    repository: "kamosmbatyan/interstate-sidecar"
-    # -- Docker image tag for the sidecar component
-    # @default -- "latest"
-    tag: "latest"
-    # -- Image pull policy
-    # @default -- "IfNotPresent"
-    pullPolicy: "IfNotPresent"
 
-  ## Sidecar service configuration
-  service:
-    # -- Service type, values: NodePort, ClusterIP, LoadBalancer
-    # @default -- NodePort
-    type: NodePort
-    # -- Whether to expose the metrics port when using NodePort service type
-    # @default -- false
-    exposeMetrics: false
-    # -- NodePort specifications for service ports
-    nodePorts:
-      # -- Specify commitment port number (30000-32767) or leave null for auto-assignment
-      commitment: null
-    # -- Additional annotations for the service
-    annotations: {}
-      # service.beta.kubernetes.io/aws-load-balancer-internal: "true"
-      # metallb.universe.tf/allow-shared-ip: commitboost
+# This only contains the ports that are used by the main container(interstate-cb-module).
+# The extraContainers ports are added in the service.yaml patch by the kustomization.yaml file.
+service:
+  ports:
+    - name: http
+      port: 18550
+      protocol: TCP
+      targetPort: http
+    - name: metrics
+      port: 9091
+      protocol: TCP
+      targetPort: metrics
 
-  ## Sidecar ingress configuration
-  ingress:
-    # -- Enable or disable the ingress
-    enabled: false
-    # -- Ingress class name to use
-    className: "nginx"
-    # -- Additional annotations for the ingress
-    annotations:
-      kubernetes.io/ingress.class: nginx
-      nginx.ingress.kubernetes.io/rewrite-target: /
-    # -- List of host configurations for the ingress
-    hosts:
-      - host: # Your FQDN here.
-        paths:
-          - path: /
-            # -- Path type for the ingress (Prefix, Exact, ImplementationSpecific)
-            pathType: Prefix
-            # -- Service port name to route traffic to
-            serviceName: commitment
-    # -- TLS configuration for the ingress
-    tls:
-      - secretName: sidecar-tls-secret
-        hosts:
-          # Add items to the list of DNS records to create. e.g.:
-          # - sidecar.example.com
+args:
+  - "--config=/etc/interstate-boost/cb-config.toml"
 
-  ## Sidecar deployment configuration
-  deployment:
-    # -- Number of replicas for the deployment
-    replicas: 1
-    # -- Update strategy configuration for the deployment
-    updateStrategy:
-      # -- Type of update strategy (RollingUpdate or Recreate)
-      type: RollingUpdate
-      # -- Maximum number of pods that can be created over the desired number of pods
-      maxSurge: 1
-      # -- Maximum number of pods that can be unavailable during the update
-      maxUnavailable: 0
-    # -- Termination grace period in seconds
-    terminationGracePeriodSeconds: 30
-    # -- Security context for the pod
-    podSecurityContext:
-      # -- Group ID to run the pod as
-      fsGroup: 1000
-      # -- Run containers as non-root
-      runAsNonRoot: true
-      # -- User ID to run the container as
-      runAsUser: 1000
-    # -- Security context for the container
-    containerSecurityContext:
-      # -- Prevent privilege escalation
-      allowPrivilegeEscalation: false
-      capabilities:
-        # -- Drop all Linux capabilities for security
-        drop:
-          - ALL
-    # -- Resource limits and requests for the container
-    resources:
-      limits:
-        # -- CPU limit
-        cpu: 1000m
-        # -- Memory limit
-        memory: 1Gi
-      requests:
-        # -- CPU request
-        cpu: 200m
-        # -- Memory request
-        memory: 256Mi
-    # -- Liveness probe configuration to determine if the container is running
-    livenessProbe:
-      httpGet:
-        # -- Path for liveness probe
-        path: /health
-        # -- Port for liveness probe
-        port: metrics
-      # -- Initial delay before probing starts
-      initialDelaySeconds: 30
-      # -- How often to perform the probe
-      periodSeconds: 10
-    # -- Readiness probe configuration to determine if the container is ready to receive traffic
-    readinessProbe:
-      httpGet:
-        # -- Path for readiness probe
-        path: /ready
-        # -- Port for readiness probe
-        port: metrics
-      # -- Initial delay before probing starts
-      initialDelaySeconds: 5
-      # -- How often to perform the probe
-      periodSeconds: 10
+env:
+  - name: CHAIN
+    value: "Holesky"
+  - name: CB_CONFIG
+    value: /etc/interstate-boost/cb-config.toml
+  - name: CB_METRICS_PORT
+    value: "9091"
+  - name: BEACON_RPC
+    value: http://beacon:5052
+  - name: METRICS_SERVER
+    value: "9091"
+  - name: RUST_LOG
+    value: "debug"
 
-  ## Sidecar environment variables
-  env:
-    # -- Rust logging level
-    rustLog: "debug"
-    # -- Enable Rust backtrace (1=enabled, 0=disabled)
-    rustBacktrace: "1"
-    # -- Port for commitment service
-    commitmentPort: "9061"
-    # -- Port for metrics service
-    metricsPort: "8018"
-    # -- Blockchain network to connect to
-    chain: "kurtosis"
-    # -- URL for the beacon node API
-    beaconApiUrl: "http://49.13.144.62:32782"
-    # -- URL for the execution client API
-    executionApiUrl: "http://49.13.144.62:32772"
-    # -- URL for the engine API
-    engineApiUrl: "http://49.13.144.62:32771"
-    # -- URL for the CB service (defaults to app-name-cb service with cb.port)
-    # cbUrl: "http://127.0.0.1:18550"
-    # -- Port for the builder service
-    builderPort: "9062"
-    # -- JWT token for authentication
-    jwt: "dc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b"
-    # -- Time in seconds between slots
-    slotTime: "2"
-    # -- Deadline for commitments in milliseconds
-    commitmentDeadline: "100"
-    # -- Ethereum address to receive fees
-    feeRecipient: "0x8aC112a5540f441cC9beBcC647041A6E0D595B94"
-    # -- Ethereum address of the gateway contract
-    gatewayContract: "0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009"
-    # -- URL for the Web3Signer service
-    web3SignerUrl: "https://b2e4-2a01-4ff-f0-4039-00-1.ngrok-free.app"
-    # -- Path to CA certificate file
-    # caCertPath: "/root/kartos/web3signer-25.2.0/crt/w3s.crt"
-    # -- Path to combined client certificate and key PEM file
-    # clientCombinedPemPath: "/root/kartos/web3signer-25.2.0/crt/my_cert.pem"
-    # -- URL for sidecar info sender service
-    sidecarInfoSenderUrl: "http://49.13.144.62:8000"
-    # -- URL for commit boost signer service
-    commitBoostSignerUrl: "http://49.13.144.62:18551"
+initContainerSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+  runAsNonRoot: false
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+  capabilities: null
 
-## Commitment Boost (CB) component configuration
-cb:
-  # -- Additional annotations for the CB component
-  annotations: {}
-  # -- Enable or disable the CB component
+initContainers:
+  - name: init
+    # This can be updated to a different alpine image with bash installed.
+    image: nethermindeth/bash:5.2-alpine3.19
+    command:
+      - sh
+      - -ac
+      - >
+        echo "Installing dependencies...";
+        apk add openssl gettext;
+        echo "Generating certificates...";
+        mkdir -p /etc/interstate-boost/certs/;
+        printenv CA_CRT | base64 -d  > /etc/interstate-boost/certs/dirk.crt;
+        printenv CA_KEY | base64 -d  > /etc/interstate-boost/certs/dirk.key;
+        bash /scripts/generate_cert.sh /etc/interstate-boost/certs/ dirk interstate-boost;
+        echo "Generating sidecar env...";
+        mkdir -p /etc/interstate-boost/env;
+        envsubst < /etc/interstate-boost/configs/sidecar-env > /etc/interstate-boost/env/.env;
+        echo "Preparing proxy dir...";
+        mkdir -p /etc/interstate-boost/proxy_dir/keys;
+        mkdir -p /etc/interstate-boost/proxy_dir/secrets;
+        echo "Updating permissions...";
+        chown -R 1000:1000 /etc/interstate-boost/certs/*;
+        echo "Done!";
+    envFrom:
+      # Load secret created from the external-secret.yaml file.
+      - secretRef:
+          name: interstate-boost
+    env:
+      - name: RUST_LOG
+        value: "debug"
+      - name: RUST_BACKTRACE
+        value: "1"
+      - name: CARGO_MANIFEST_DIR
+        value: "/app"
+      - name: COMMITMENT_PORT
+        value: "9063"
+      - name: METRICS_PORT
+        value: "8018"
+      - name: CHAIN
+        value: "holesky"
+      - name: BEACON_API_URL
+        value: http://beacon:5052
+      - name: EXECUTION_API_URL
+        value: http://execution:8545
+      - name: ENGINE_API_URL
+        value: http://execution:8551
+      - name: CB_URL
+        value: http://localhost:18550
+      - name: BUILDER_PORT
+        value: "9064"
+      - name: JWT
+        valueFrom:
+          secretKeyRef:
+            key: INTERSTATE_JWT
+            name: interstate-boost
+      - name: SLOT_TIME
+        value: "2"
+      - name: COMMITMENT_DEADLINE
+        value: "100"
+      - name: FEE_RECIPIENT
+      #   value: "<FEE_RECIPIENT_ADDRESS>"
+      - name: GATEWAY_CONTRACT
+        value: "0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009"
+      - name: SIDECAR_INFO_SENDER_URL
+        value: "http://95.216.145.221:8000/api/v1/update_sidecars"
+      - name: COMMIT_BOOST_SIGNER_URL
+        value: "http://localhost:18551"
+    volumeMounts:
+      - name: config
+        mountPath: /etc/interstate-boost/configs
+      - name: sidecar-env
+        mountPath: /etc/interstate-boost/env
+      - name: proxy-dir
+        mountPath: /etc/interstate-boost/proxy_dir
+      - name: certs
+        mountPath: /etc/interstate-boost/certs
+      - name: scripts
+        mountPath: /scripts
+
+extraContainers:
+  - name: commit-boost-signer
+    image: ghcr.io/cbermudez97/cb-signer:main
+    imagePullPolicy: Always
+    ports:
+      - name: signer
+        containerPort: 18551
+        protocol: TCP
+      - name: sg-metrics
+        containerPort: 9092
+        protocol: TCP
+    env:
+      - name: CB_CONFIG
+        value: /etc/interstate-boost/sg-config.toml
+      - name: CB_JWTS
+        valueFrom:
+          secretKeyRef:
+            key: CB_JWT
+            name: interstate-boost
+      - name: CB_SIGNER_PORT
+        value: "18551"
+      - name: CB_METRICS_PORT
+        value: "9092"
+      - name: CB_SIGNER_DIRK_CERT_FILE
+        value: /etc/interstate-boost/certs/interstate-boost.crt
+      - name: CB_SIGNER_DIRK_KEY_FILE
+        value: /etc/interstate-boost/certs/interstate-boost.key
+      - name: CB_SIGNER_DIRK_SECRETS_DIR
+        value: "/etc/interstate-boost/dirk_secrets"
+      - name: CB_SIGNER_DIRK_CA_CERT_FILE
+        value: /etc/interstate-boost/certs/dirk.crt
+      - name: CB_PROXY_KEYS_DIR
+        value: /etc/interstate-boost/proxy_dir/keys
+      - name: CB_PROXY_SECRETS_DIR
+        value: /etc/interstate-boost/proxy_dir/secrets
+    volumeMounts:
+      - name: config
+        mountPath: /etc/interstate-boost/sg-config.toml
+        subPath: sg-config.toml
+      - name: certs
+        mountPath: /etc/interstate-boost/certs
+      - name: dirk-secrets
+        mountPath: /etc/interstate-boost/dirk_secrets
+      - name: proxy-dir
+        mountPath: /etc/interstate-boost/proxy_dir
+
+  - name: interstate-sidecar
+    image: "kamosmbatyan/interstate-sidecar:latest"
+    imagePullPolicy: Always
+    ports:
+      - name: commitments
+        containerPort: 9063
+        protocol: TCP
+      - name: builder
+        containerPort: 9064
+        protocol: TCP
+      - name: sc-metrics
+        containerPort: 8018
+        protocol: TCP
+    env:
+      - name: RUST_LOG
+        value: "debug"
+      - name: RUST_BACKTRACE
+        value: "1"
+    volumeMounts:
+      - name: sidecar-env
+        mountPath: /app/.env
+        subPath: .env
+      - name: certs
+        mountPath: /etc/interstate-boost/certs
+
+volumes:
+  - name: config
+    configMap:
+      name: interstate-boost
+  - name: scripts
+    configMap:
+      name: interstate-boost-scripts
+  - name: dirk-secrets
+    emptyDir: {}
+  - name: proxy-dir
+    emptyDir: {}
+  - name: sidecar-env
+    emptyDir: {}
+  - name: certs
+    emptyDir: {}
+  - name: logs
+    emptyDir: {}
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: config
+    mountPath: /etc/interstate-boost/cb-config.toml
+    subPath: cb-config.toml
+
+ingress:
   enabled: true
-  # -- Port for the CB service
-  port: "18550"
-  ## CB image configuration
-  image:
-    # -- Docker image repository for the CB component
-    repository: "kamosmbatyan/interstate-pbs-module"
-    # -- Docker image tag for the CB component
-    # @default -- "latest"
-    tag: "latest"
-    # -- Image pull policy
-    # @default -- "IfNotPresent"
-    pullPolicy: IfNotPresent
-  ## CB configuration
-  config:
-    # -- Blockchain network to connect to
-    chain: "Holesky"
-    ## PBS (Proposer-Builder Separation) configuration
-    pbs:
-      # -- Host address to bind to
-      host: "0.0.0.0"
-      # -- Genesis timestamp in seconds since Unix epoch
-      genesisTimeSec: "1738648239"
-      # -- URL for the beacon node RPC
-      beaconRpc: "http://49.13.144.62:32781"
-    ## Relay configuration
-    relays:
-      # -- List of relay endpoints to connect to
-      - url: "https://0x821f2a65afb70e7f2e820a925a9b4c80a159620582c1766b1b09729fec178b11ea22abb3a51f07b288be815a1a2ff516@bloxroute.holesky.blxrbdn.com"
-    ## Metrics configuration
-    metrics:
-      # -- Path to Prometheus configuration file
-      prometheusConfig: "./prometheus.yml"
-    ## Logs configuration
-    logs:
-      # -- Directory path for log files
-      logDirPath: "./logs"
-      # -- Log level (debug, info, warn, error)
-      logLevel: "debug"
-      # -- Maximum number of log files to retain
-      maxLogFiles: 30
-  ## CB deployment configuration
-  deployment:
-    # -- Port for the CB service
-    port: 18550
-    # -- Number of replicas for the deployment
-    replicas: 1
-    # -- Update strategy configuration for the deployment
-    updateStrategy:
-      # -- Type of update strategy (RollingUpdate or Recreate)
-      type: RollingUpdate
-      # -- Maximum number of pods that can be created over the desired number of pods
-      maxSurge: 1
-      # -- Maximum number of pods that can be unavailable during the update
-      maxUnavailable: 0
-    # -- Termination grace period in seconds
-    terminationGracePeriodSeconds: 60
-    # -- Security context for the pod
-    podSecurityContext:
-      # -- Group ID to run the pod as
-      fsGroup: 1000
-      # -- Run containers as non-root
-      runAsNonRoot: true
-      # -- User ID to run the container as
-      runAsUser: 1000
-    # -- Security context for the container
-    containerSecurityContext:
-      # -- Prevent privilege escalation
-      allowPrivilegeEscalation: false
-      capabilities:
-        # -- Drop all Linux capabilities for security
-        drop:
-          - ALL
-      # -- Mount the root filesystem as read-only
-      readOnlyRootFilesystem: true
-    # -- Resource limits and requests for the container
-    resources:
-      limits:
-        # -- CPU limit
-        cpu: 1000m
-        # -- Memory limit
-        memory: 1Gi
-      requests:
-        # -- CPU request
-        cpu: 200m
-        # -- Memory request
-        memory: 256Mi
-    # -- Log level for the deployment
-    logLevel: "debug"
-    # -- Pod affinity rules for scheduling
-    affinity:
-      podAntiAffinity:
-        preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                  - key: app.kubernetes.io/name
-                    operator: In
-                    values:
-                      - propose-commitment-network
-                  - key: app.kubernetes.io/component
-                    operator: In
-                    values:
-                      - cb
-              topologyKey: kubernetes.io/hostname
-
+  className: "ingress-nginx"
+  annotations:
+    {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: interstate-holesky.myapp.com
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+          portName: http

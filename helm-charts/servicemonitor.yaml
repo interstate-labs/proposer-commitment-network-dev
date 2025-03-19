@@ -1,0 +1,27 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: interstate-boost-holesky-service-monitor
+  labels:
+    release: prometheus
+spec:
+  endpoints:
+    - port: sc-metrics
+      path: /metrics
+      interval: 30s
+      honorLabels: false
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      honorLabels: false
+    - port: sg-metrics
+      path: /metrics
+      interval: 30s
+      honorLabels: false
+  namespaceSelector:
+    matchNames:
+      - holesky
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: scw-testnet-validators-ams-apps-interstate-boost-holesky
+      app.kubernetes.io/name: interstate-boost
