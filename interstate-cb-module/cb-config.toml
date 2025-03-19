@@ -9,11 +9,6 @@ beacon_rpc="http://5.161.69.231:32782"
 [[relays]]
 url = "https://0x821f2a65afb70e7f2e820a925a9b4c80a159620582c1766b1b09729fec178b11ea22abb3a51f07b288be815a1a2ff516@bloxroute.holesky.blxrbdn.com"
 
-[signer]
-[signer.loader]
-keys_path = "/work/devnetwork/new-validator-register/assigned_data/keys" # Fixed path to the keys folder to run validator
-secrets_path = "/work/devnetwork/new-validator-register/assigned_data/secrets" # Fixed path to the secrets folder to run validator
-
 [metrics]
 prometheus_config = "./prometheus.yml"
 
