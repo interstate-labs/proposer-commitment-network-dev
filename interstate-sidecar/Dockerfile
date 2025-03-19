@@ -17,7 +17,7 @@ RUN cargo build --release
 
 FROM debian@sha256:6344a6747740d465bff88e833e43ef881a8c4dd51950dba5b30664c93f74cbef
 WORKDIR /usr/local/bin
-COPY --from=builder /app/target/release/interstate-cb-module /
+COPY --from=builder /app/target/release/interstate-pbs-module /
 RUN apt-get update && apt-get install -y libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user and switch to it
@@ -27,5 +27,5 @@ USER appuser
 # Mount allowlisted directories as read-only volumes
 VOLUME ["/keystores:ro", "/work/interstate-protocol/proposer-commitment-network/.env:ro"]
 
-ENTRYPOINT ["/interstate-cb-module"]
+ENTRYPOINT ["/interstate-pbs-module"]
 CMD ["--read-only"]

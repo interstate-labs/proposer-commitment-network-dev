@@ -1,6 +1,6 @@
 services:
-  interstate-cb-module:
-    image: interstatecrypto/interstate-cb-module:latest
+  interstate-pbs-module:
+    image: interstatecrypto/interstate-pbs-module:latest
     container_name: interstate-sidecar
     restart: unless-stopped
     ports:

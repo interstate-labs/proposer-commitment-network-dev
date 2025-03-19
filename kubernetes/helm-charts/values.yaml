@@ -180,7 +180,7 @@ cb:
   ## CB image configuration
   image:
     # -- Docker image repository for the CB component
-    repository: "kamosmbatyan/interstate-cb-module"
+    repository: "kamosmbatyan/interstate-pbs-module"
     # -- Docker image tag for the CB component
     # @default -- "latest"
     tag: "latest"

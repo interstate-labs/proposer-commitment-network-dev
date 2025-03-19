@@ -1,0 +1,238 @@
+nameOverride: "interstate-boost"
+
+replicaCount: 1
+
+image:
+  repository: kamosmbatyan/interstate-cb-module
+  pullPolicy: Always
+  tag: "latest"
+
+deployment:
+  enabled: true
+
+# This only contains the ports that are used by the main container(interstate-cb-module).
+# The extraContainers ports are added in the service.yaml patch by the kustomization.yaml file.
+service:
+  ports:
+    - name: http
+      port: 18550
+      protocol: TCP
+      targetPort: http
+    - name: metrics
+      port: 9091
+      protocol: TCP
+      targetPort: metrics
+
+args:
+  - "--config=/etc/interstate-boost/cb-config.toml"
+
+env:
+  - name: CHAIN
+    value: "Holesky"
+  - name: CB_CONFIG
+    value: /etc/interstate-boost/cb-config.toml
+  - name: CB_METRICS_PORT
+    value: "9091"
+  - name: BEACON_RPC
+    value: http://beacon:5052
+  - name: METRICS_SERVER
+    value: "9091"
+  - name: RUST_LOG
+    value: "debug"
+
+initContainerSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+  runAsNonRoot: false
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+  capabilities: null
+
+initContainers:
+  - name: init
+    # This can be updated to a different alpine image with bash installed.
+    image: nethermindeth/bash:5.2-alpine3.19
+    command:
+      - sh
+      - -ac
+      - >
+        echo "Installing dependencies...";
+        apk add openssl gettext;
+        echo "Generating certificates...";
+        mkdir -p /etc/interstate-boost/certs/;
+        printenv CA_CRT | base64 -d  > /etc/interstate-boost/certs/dirk.crt;
+        printenv CA_KEY | base64 -d  > /etc/interstate-boost/certs/dirk.key;
+        bash /scripts/generate_cert.sh /etc/interstate-boost/certs/ dirk interstate-boost;
+        echo "Generating sidecar env...";
+        mkdir -p /etc/interstate-boost/env;
+        envsubst < /etc/interstate-boost/configs/sidecar-env > /etc/interstate-boost/env/.env;
+        echo "Preparing proxy dir...";
+        mkdir -p /etc/interstate-boost/proxy_dir/keys;
+        mkdir -p /etc/interstate-boost/proxy_dir/secrets;
+        echo "Updating permissions...";
+        chown -R 1000:1000 /etc/interstate-boost/certs/*;
+        echo "Done!";
+    envFrom:
+      # Load secret created from the external-secret.yaml file.
+      - secretRef:
+          name: interstate-boost
+    env:
+      - name: RUST_LOG
+        value: "debug"
+      - name: RUST_BACKTRACE
+        value: "1"
+      - name: CARGO_MANIFEST_DIR
+        value: "/app"
+      - name: COMMITMENT_PORT
+        value: "9063"
+      - name: METRICS_PORT
+        value: "8018"
+      - name: CHAIN
+        value: "holesky"
+      - name: BEACON_API_URL
+        value: http://beacon:5052
+      - name: EXECUTION_API_URL
+        value: http://execution:8545
+      - name: ENGINE_API_URL
+        value: http://execution:8551
+      - name: CB_URL
+        value: http://localhost:18550
+      - name: BUILDER_PORT
+        value: "9064"
+      - name: JWT
+        valueFrom:
+          secretKeyRef:
+            key: INTERSTATE_JWT
+            name: interstate-boost
+      - name: SLOT_TIME
+        value: "2"
+      - name: COMMITMENT_DEADLINE
+        value: "100"
+      - name: FEE_RECIPIENT
+      #   value: "<FEE_RECIPIENT_ADDRESS>"
+      - name: GATEWAY_CONTRACT
+        value: "0x6db20C530b3F96CD5ef64Da2b1b931Cb8f264009"
+      - name: SIDECAR_INFO_SENDER_URL
+        value: "http://95.216.145.221:8000/api/v1/update_sidecars"
+      - name: COMMIT_BOOST_SIGNER_URL
+        value: "http://localhost:18551"
+    volumeMounts:
+      - name: config
+        mountPath: /etc/interstate-boost/configs
+      - name: sidecar-env
+        mountPath: /etc/interstate-boost/env
+      - name: proxy-dir
+        mountPath: /etc/interstate-boost/proxy_dir
+      - name: certs
+        mountPath: /etc/interstate-boost/certs
+      - name: scripts
+        mountPath: /scripts
+
+extraContainers:
+  - name: commit-boost-signer
+    image: ghcr.io/cbermudez97/cb-signer:main
+    imagePullPolicy: Always
+    ports:
+      - name: signer
+        containerPort: 18551
+        protocol: TCP
+      - name: sg-metrics
+        containerPort: 9092
+        protocol: TCP
+    env:
+      - name: CB_CONFIG
+        value: /etc/interstate-boost/sg-config.toml
+      - name: CB_JWTS
+        valueFrom:
+          secretKeyRef:
+            key: CB_JWT
+            name: interstate-boost
+      - name: CB_SIGNER_PORT
+        value: "18551"
+      - name: CB_METRICS_PORT
+        value: "9092"
+      - name: CB_SIGNER_DIRK_CERT_FILE
+        value: /etc/interstate-boost/certs/interstate-boost.crt
+      - name: CB_SIGNER_DIRK_KEY_FILE
+        value: /etc/interstate-boost/certs/interstate-boost.key
+      - name: CB_SIGNER_DIRK_SECRETS_DIR
+        value: "/etc/interstate-boost/dirk_secrets"
+      - name: CB_SIGNER_DIRK_CA_CERT_FILE
+        value: /etc/interstate-boost/certs/dirk.crt
+      - name: CB_PROXY_KEYS_DIR
+        value: /etc/interstate-boost/proxy_dir/keys
+      - name: CB_PROXY_SECRETS_DIR
+        value: /etc/interstate-boost/proxy_dir/secrets
+    volumeMounts:
+      - name: config
+        mountPath: /etc/interstate-boost/sg-config.toml
+        subPath: sg-config.toml
+      - name: certs
+        mountPath: /etc/interstate-boost/certs
+      - name: dirk-secrets
+        mountPath: /etc/interstate-boost/dirk_secrets
+      - name: proxy-dir
+        mountPath: /etc/interstate-boost/proxy_dir
+
+  - name: interstate-sidecar
+    image: "kamosmbatyan/interstate-sidecar:latest"
+    imagePullPolicy: Always
+    ports:
+      - name: commitments
+        containerPort: 9063
+        protocol: TCP
+      - name: builder
+        containerPort: 9064
+        protocol: TCP
+      - name: sc-metrics
+        containerPort: 8018
+        protocol: TCP
+    env:
+      - name: RUST_LOG
+        value: "debug"
+      - name: RUST_BACKTRACE
+        value: "1"
+    volumeMounts:
+      - name: sidecar-env
+        mountPath: /app/.env
+        subPath: .env
+      - name: certs
+        mountPath: /etc/interstate-boost/certs
+
+volumes:
+  - name: config
+    configMap:
+      name: interstate-boost
+  - name: scripts
+    configMap:
+      name: interstate-boost-scripts
+  - name: dirk-secrets
+    emptyDir: {}
+  - name: proxy-dir
+    emptyDir: {}
+  - name: sidecar-env
+    emptyDir: {}
+  - name: certs
+    emptyDir: {}
+  - name: logs
+    emptyDir: {}
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: config
+    mountPath: /etc/interstate-boost/cb-config.toml
+    subPath: cb-config.toml
+
+ingress:
+  enabled: true
+  className: "ingress-nginx"
+  annotations:
+    {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: interstate-holesky.myapp.com
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+          portName: http
