@@ -138,9 +138,16 @@ where
             Ok(header) => {
                 let mut fallback_payload = server.fallback_payload.lock();
                 *fallback_payload = None;
-
-                tracing::debug!(?header, "got valid proofs of header");
-                return Ok(Json(header?));
+                match header {
+                    Ok(data) => {
+                        tracing::debug!(?data, "got valid proofs of header");
+                        return Ok(Json(data));
+                    },
+                    Err(err) => {
+                        tracing::error!(?err, "failed in getting header");
+                    }
+                }
+               
             }
             Err(err) => {
                 tracing::error!(

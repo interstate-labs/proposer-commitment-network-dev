@@ -275,30 +275,16 @@ async fn main() {
 
     let fallback_builder = FallbackBuilder::new(&config);
 
-    //  let ws_stream = match connect_async(config.collector_ws.clone()).await {
-    //     Ok((stream, response)) => {
-    //         println!("Handshake for client has been completed");
-    //         // This will be the HTTP response, same as with server this is the last moment we
-    //         // can still access HTTP stuff.
-    //         println!("Server response was {response:?}");
-    //         stream
-    //     }
-    //     Err(e) => {
-    //         println!("WebSocket handshake for client  failed with {e}!");
-    //         return;
-    //     }
-    // };
-
     tracing::debug!("Connected to the server!");
 
     let signer: Arc<dyn Signer>;
     if web3signer_enabled {
         let web3signer_url = config.web3signer_url.clone();
-        let creds = Web3SignerTlsCredentials {
-            ca_cert_path: config.ca_cert_path.clone(),
-            combined_pem_path: config.combined_pem_path.clone(),
-        };
-        let mut web3signer = Web3Signer::connect(web3signer_url, creds)
+        // let creds = Web3SignerTlsCredentials {
+        //     ca_cert_path: config.ca_cert_path.clone(),
+        //     combined_pem_path: config.combined_pem_path.clone(),
+        // };
+        let mut web3signer = Web3Signer::connect(web3signer_url)
             .await
             .expect("Web3signer connection failed!");
         signer = Arc::new(web3signer);
@@ -312,7 +298,7 @@ async fn main() {
             .await
             .expect("Web3signer fetching failed!");
   
-    tracing::info!(?accounts);
+    // tracing::info!(?accounts);
 
     let _ = send_sidecar_info(
         accounts,
@@ -326,21 +312,6 @@ async fn main() {
     let commit_boost_api = Arc::new(Mutex::new(commit_boost_api));
     let fallback_builder = Arc::new(Mutex::new(fallback_builder));
 
-    // let web3signer_url = config.web3signer_url.clone();
-    // let creds = Web3SignerTlsCredentials { ca_cert_path: config.ca_cert_path.clone(), combined_pem_path: config.combined_pem_path.clone() };
-    // let mut web3signer = Web3Signer::connect(web3signer_url, creds)
-    //     .await
-    //     .expect("Web3signer connection failed!");
-
-    // let accounts = web3signer
-    //     .list_accounts()
-    //     .await
-    //     .expect("Web3signer fetching failed!");
-
-    // tracing::info!(?accounts);
-
-    // let (mut write, mut read) = ws_stream.split();
-    // let constraint_state_store = constraint_state.write();
     loop {
         let constraint_stat_inner_clone = Arc::clone(&constraint_state_arc);
         let mut constraint_state_inner = constraint_stat_inner_clone.lock().await;

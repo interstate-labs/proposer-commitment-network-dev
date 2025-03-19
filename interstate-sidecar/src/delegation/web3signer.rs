@@ -25,14 +25,14 @@ pub struct Web3Signer {
 
 impl Web3Signer {
     /// Establish connection to a remote Web3Signer instance with TLS credentials.
-    pub async fn connect(addr: String, credentials: Web3SignerTlsCredentials) -> Result<Self> {
+    pub async fn connect(addr: String) -> Result<Self> {
         let base_url = addr.parse()?;
-        let (cert, identity) = compose_credentials(credentials)?;
+        // let (cert, identity) = compose_credentials(credentials)?;
         
         let client = reqwest::Client::builder()
-            .add_root_certificate(cert)
-            .identity(identity)
-            .use_rustls_tls()
+            // .add_root_certificate(cert)
+            // .identity(identity)
+            // .use_rustls_tls()
             .build()?;
 
         Ok(Self { base_url, client })
@@ -44,7 +44,9 @@ impl Web3Signer {
     /// This is due to signing only being over the consensus type.
     ///
     /// Reference: https://commit-boost.github.io/commit-boost-client/api/
-    pub async fn list_accounts(&mut self) -> Result<Vec<String>> {
+    pub async fn list_accounts(&self) ->Result<Vec<String>, Box<dyn std::error::Error>> {
+        tracing::debug!("list_accounts ");
+        
         let path = self.base_url.join("/signer/v1/get_pubkeys")?;
         tracing::info!(?path);
         let resp = self
@@ -69,7 +71,7 @@ impl Web3Signer {
     /// This will sign an arbituary root over the consensus type.
     ///
     /// Reference: https://commit-boost.github.io/commit-boost-client/api/
-    pub async fn request_signature(&mut self, pub_key: &str, object_root: &str) -> Result<String> {
+    pub async fn request_signature(&self, pub_key: &str, object_root: &str) -> Result<String> {
         let path = self.base_url.join("/signer/v1/request_signature")?;
         let body = CommitBoostSignatureRequest {
             type_: "consensus".to_string(),
@@ -170,10 +172,10 @@ pub async fn generate_from_web3signer(
     action: Action,
 ) -> Result<Vec<SignedMessage>> {
     // Connect to web3signer.
-    let mut web3signer = Web3Signer::connect(opts.url, opts.tls_credentials).await?;
+    let mut web3signer = Web3Signer::connect(opts.url).await?;
 
     // Read in the accounts from the remote keystore.
-    let accounts = web3signer.list_accounts().await?;
+    let accounts = web3signer.list_accounts().await.expect("faliled to get accounts");
     debug!("Found {} remote accounts to sign with", accounts.len());
 
     let mut signed_messages = Vec::with_capacity(accounts.len());
