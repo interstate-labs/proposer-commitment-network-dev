@@ -162,7 +162,10 @@ where
         //   return Err(CommitBoostError::FailedToFetchLocalPayload(slot));
         // };
 
-        let payload_and_bid = server.payload_fetcher.fetch_payload(slot).await.unwrap();
+        let Some(payload_and_bid) = server.payload_fetcher.fetch_payload(slot).await else {
+          tracing::debug!("No fallback payload for slot {slot}");
+          return Err(CommitBoostError::FailedToFetchLocalPayload(slot));
+        };
 
         {
             // Cache both the payload and the bid
