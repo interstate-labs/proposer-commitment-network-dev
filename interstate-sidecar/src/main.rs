@@ -298,7 +298,7 @@ async fn main() {
             .await
             .expect("Web3signer fetching failed!");
   
-    // tracing::info!(?accounts);
+    tracing::info!(?accounts);
 
     let _ = send_sidecar_info(
         accounts,
