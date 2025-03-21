@@ -54,11 +54,11 @@ pub trait Signer: Send + Sync {
 #[async_trait::async_trait]
 impl Signer for Web3Signer {
     async fn list_accounts(&self) -> Result<Vec<String>, String> {
-        self.list_accounts().await.map_err(|e| e.to_string())
+        self.w3_list_accounts().await.map_err(|e| e.to_string())
     }
 
     async fn request_signature(&self, account: &str, digest: &str) -> Result<String, String> {
-        self.request_signature(account, digest).await.map_err(|e| e.to_string())
+        self.w3_request_signature(account, digest).await.map_err(|e| e.to_string())
     }
 }
 
