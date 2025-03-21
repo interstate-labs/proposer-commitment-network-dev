@@ -49,8 +49,6 @@ async fn main() ->eyre::Result<()> {
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    let cli = Cli::parse();
-    
     let keys_path = env::var("KEYS_PATH").expect("couldn't find keys path in env file");
     let password_path = env::var("SECRETS_PATH").expect("couldn't find secrets path in env file");
     let out = env::var("OUT_FILE").expect("couldn't find out file in env file");
@@ -61,21 +59,15 @@ async fn main() ->eyre::Result<()> {
     let delegatee_pubkey:BlsPublicKey = parse_bls_public_key(delegate_pbukey_str.as_str()).expect("Invalid public key");
     let keystore_secret = KeystoreSecret::from_directory(password_path.as_str()).unwrap();
 
-    let mut action_type = Action::Delegate;
-
-    if cli.action != Action::Delegate {
-        action_type = Action::Revoke;
-    }
-    
     let signed_messages = generate_from_keystore(
         &keys_path,
         keystore_secret,
         delegatee_pubkey.clone(),
         Chain::Kurtosis,
-        action_type.clone(),
+        Action::Revoke,
     ).expect("Invalid signed message request");
 
-    let signed_messages_web3 = generate_from_web3signer(Web3SignerOpts{ url:web3signer_url}, delegatee_pubkey, action_type).await?;
+    let signed_messages_web3 = generate_from_web3signer(Web3SignerOpts{ url:web3signer_url}, delegatee_pubkey, Action::Revoke).await?;
 
     debug!("Signed {} messages with keystore", signed_messages.len());
     debug!("Signed {} messages with web3signature", signed_messages_web3.len());
