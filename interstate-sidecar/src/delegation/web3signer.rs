@@ -25,14 +25,14 @@ pub struct Web3Signer {
 
 impl Web3Signer {
     /// Establish connection to a remote Web3Signer instance with TLS credentials.
-    pub async fn connect(addr: String, credentials: Web3SignerTlsCredentials) -> Result<Self> {
+    pub async fn connect(addr: String) -> Result<Self> {
         let base_url = addr.parse()?;
-        let (cert, identity) = compose_credentials(credentials)?;
+        // let (cert, identity) = compose_credentials(credentials)?;
         
         let client = reqwest::Client::builder()
-            .add_root_certificate(cert)
-            .identity(identity)
-            .use_rustls_tls()
+            // .add_root_certificate(cert)
+            // .identity(identity)
+            // .use_rustls_tls()
             .build()?;
 
         Ok(Self { base_url, client })
@@ -170,7 +170,7 @@ pub async fn generate_from_web3signer(
     action: Action,
 ) -> Result<Vec<SignedMessage>> {
     // Connect to web3signer.
-    let mut web3signer = Web3Signer::connect(opts.url, opts.tls_credentials).await?;
+    let mut web3signer = Web3Signer::connect(opts.url).await?;
 
     // Read in the accounts from the remote keystore.
     let accounts = web3signer.w3_list_accounts().await?;

@@ -46,6 +46,10 @@ pub struct Config {
     pub fee_recipient: Address,
     /// Local builder bls private key for signing fallback payloads.
     pub builder_bls_private_key: BLSSecretKey,
+    pub keystore_secrets_path: PathBuf,
+    /// Path to the keystores folder.
+    pub keystore_pubkeys_path: PathBuf,
+    /// Path to the delegations file.
     /// Gateway contract address
     pub gateway_contract: Address,
     /// Web3Signer settings
@@ -76,6 +80,12 @@ impl Default for Config {
             ca_cert_path: String::new(),
             combined_pem_path: String::new(),
             commit_boost_signer_url: String::new(),
+            keystore_secrets_path: PathBuf::from(
+                "/root/assigned_data/secrets",
+            ),
+            keystore_pubkeys_path: PathBuf::from(
+                "/root/assigned_data/keys",
+            ),
         }
     }
 }
@@ -121,6 +131,8 @@ impl Config {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or_else(|| "".to_string()),
             commit_boost_signer_url: envs["COMMIT_BOOST_SIGNER_URL"].parse().unwrap(),
+            keystore_secrets_path: PathBuf::from(envs["KEYSTORE_SECRETS_PATH"].as_str()),
+            keystore_pubkeys_path: PathBuf::from(envs["KEYSTORE_PUBKEYS_PATH"].as_str()),
         }
     }
 }

@@ -138,9 +138,16 @@ where
             Ok(header) => {
                 let mut fallback_payload = server.fallback_payload.lock();
                 *fallback_payload = None;
-
-                tracing::debug!(?header, "got valid proofs of header");
-                return Ok(Json(header?));
+                match header {
+                    Ok(data) => {
+                        tracing::debug!(?data, "got valid proofs of header");
+                        return Ok(Json(data));
+                    },
+                    Err(err) => {
+                        tracing::error!(?err, "failed in getting header");
+                    }
+                }
+               
             }
             Err(err) => {
                 tracing::error!(
@@ -155,7 +162,10 @@ where
         //   return Err(CommitBoostError::FailedToFetchLocalPayload(slot));
         // };
 
-        let payload_and_bid = server.payload_fetcher.fetch_payload(slot).await.unwrap();
+        let Some(payload_and_bid) = server.payload_fetcher.fetch_payload(slot).await else {
+          tracing::debug!("No fallback payload for slot {slot}");
+          return Err(CommitBoostError::FailedToFetchLocalPayload(slot));
+        };
 
         {
             // Cache both the payload and the bid
