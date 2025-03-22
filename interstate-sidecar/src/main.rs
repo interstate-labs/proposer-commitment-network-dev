@@ -1,13 +1,18 @@
 use crate::commitment::request::{PreconfRequest, PreconfResult};
 use alloy::hex::{self, decode};
+use alloy::rpc::types::beacon::{BlsPublicKey, BlsSignature};
 use alloy::{primitives::FixedBytes, rpc::types::beacon::events::HeadEvent};
 pub use beacon_api_client::mainnet::Client;
 use commitment::request::{CommitmentRequestError, CommitmentRequestEvent};
 use delegation::cb_signer::{trim_hex_prefix, CBSigner};
+use delegation::types::SignedDelegation;
+use ethereum_consensus::crypto::PublicKey as ECBlsPublicKey;
 
 use delegation::web3signer::{Web3Signer, Web3SignerTlsCredentials};
 use ethereum_consensus::crypto::PublicKey;
+use keystores::Keystores;
 use metrics::{run_metrics_server, ApiMetrics};
+use serde::{Deserialize, Serialize};
 use state::{execution::ExecutionState, fetcher::ClientState, ConstraintState, HeadEventListener};
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -41,43 +46,18 @@ mod onchain;
 mod state;
 mod test_utils;
 mod utils;
+mod keystores;
 
 pub type BLSBytes = FixedBytes<96>;
 pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
-
-#[async_trait::async_trait]
-pub trait Signer: Send + Sync {
-    async fn list_accounts(&self) -> Result<Vec<String>, String>;
-    async fn request_signature(&self, account: &str, digest: &str) -> Result<String, String>;
-}
-
-#[async_trait::async_trait]
-impl Signer for Web3Signer {
-    async fn list_accounts(&self) -> Result<Vec<String>, String> {
-        self.list_accounts().await.map_err(|e| e.to_string())
-    }
-
-    async fn request_signature(&self, account: &str, digest: &str) -> Result<String, String> {
-        self.request_signature(account, digest).await.map_err(|e| e.to_string())
-    }
-}
-
-#[async_trait::async_trait]
-impl Signer for CBSigner {
-    async fn list_accounts(&self) -> Result<Vec<String>, String> {
-        self.get_list_accounts().await.map_err(|e| e.to_string())
-    }
-
-    async fn request_signature(&self, account: &str, digest: &str) -> Result<String, String> {
-        self.request_signature(account, digest).await.map_err(|e| e.to_string())
-    }
-}
 
 async fn handle_preconfirmation_request(
     req: PreconfRequest,
     res: Sender<PreconfResult>,
     constraint_state: Arc<Mutex<ConstraintState>>,
-    signer: Arc<dyn Signer>
+    keystores: Keystores,
+    relay_client: reqwest::Client,
+    relay_url:reqwest::Url
 ) {
     let mut constraint_state = constraint_state.lock().await;
 
@@ -85,66 +65,51 @@ async fn handle_preconfirmation_request(
     ApiMetrics::increment_received_commitments_count();
 
     let slot = req.slot;
-    let pubkeys = signer
-            .list_accounts()
-            .await
-            .expect("Failed to load accounts");
+    let pubkeys = keystores.get_pubkeys();
 
     match constraint_state.validate_preconf_request(req.clone()).await {
         Ok(pubkey) => {
-            let pubkey_str = format!("{:#?}", pubkey);
-            if !pubkeys.contains(&pubkey_str) {
-                tracing::error!(
-                    "Not available validator in slot {} to sign in sidecar",
-                    slot
-                );
-                return;
-            }
-            // TODO::Validate preconfirmation request
+
+            let response = relay_client.
+            get(relay_url.join(&format!("/relay/v1/builder/delegations?slot={}", slot).as_str()).expect("invalid delegation url")).send()
+            .await.expect("failed to get delegations");
+
+            let delegations: Vec<SignedDelegation> = response.json().await.expect("failed to deserialize delgations");
             let mut signed_contraints_list: Vec<SignedConstraints> = vec![];
 
-            for tx in req.clone().txs.iter() {
-                // Commit Boost Signer
-                let trimmed_account = trim_hex_prefix(&pubkey_str).unwrap_or_default();
-                let cbs_pubkey = PublicKey::try_from(
-                    hex::decode(trimmed_account).unwrap_or_default().as_slice(),
-                )
-                .unwrap_or_default();
-                tracing::info!(?cbs_pubkey, ?pubkey, "web3signer publickey");
-                let cbs_message = ConstraintsMessage::from_tx(cbs_pubkey, slot, tx.clone());
-                let cbs_digest = format!("0x{}", &hex::encode(cbs_message.digest()));
-                let cbs_signature = signer.request_signature(&pubkey_str, &cbs_digest).await;
-                let signed_constraints = match cbs_signature {
-                    Ok(signature) => {
-                        let mut bytes_array = [0u8; 96];
-                        let bytes =
-                            hex::decode(signature.trim_matches('"').trim_start_matches("0x")).unwrap_or_default();
-                        bytes_array[..bytes.len()].copy_from_slice(&bytes);
-                        SignedConstraints {
-                            message: cbs_message,
-                            signature: FixedBytes(bytes_array),
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!(?e, "Failed to sign constraints");
-                        return;
-                    }
-                };
-                ApiMetrics::increment_preconfirmed_transactions_count(tx.tx.tx_type());
+            for delegation in delegations {
+                if (delegation.message.validator_pubkey == pubkey) && (pubkeys.contains(&delegation.message.delegatee_pubkey)) {
 
-                constraint_state.add_constraint(slot, signed_constraints.clone());
-                signed_contraints_list.push(signed_constraints.clone());
-                // match commit_boost_api.send_constraints_to_be_collected(&vec![signed_constraints.clone()]).await {
-                //     Ok(_) => tracing::info!(?signed_constraints,"Sent constratins successfully to be collected."),
-                //     Err(err) => tracing::error!(err = ?err, "Error sending constraints to be collected")
-                // };
+                    for tx in req.clone().txs.iter() {
+                        let message = ConstraintsMessage::from_tx(delegation.message.delegatee_pubkey.clone(), slot, tx.clone());
+                        let digest = message.digest();
+        
+                        let signature = keystores.sign_commit_boost_root(digest, &delegation.message.delegatee_pubkey);
+        
+                        let signed_constraints = match signature {
+                            Ok(signature) => SignedConstraints { message, signature },
+                            Err(e) => {
+                                tracing::error!(?e, "Failed to sign constraints");
+                                return;
+                            }
+                        };
+        
+                        ApiMetrics::increment_preconfirmed_transactions_count(tx.tx.tx_type());
+        
+                        constraint_state.add_constraint(slot, signed_constraints.clone());
+                        signed_contraints_list.push(signed_constraints.clone());
+                    }
+                   
+                } else{}
             }
+
             let response = serde_json::to_value(PreconfResponse {
                 ok: true,
                 signed_contraints_list,
             })
             .map_err(Into::into);
             let _ = res.send(response).ok();
+           
         }
         Err(err) => {
             ApiMetrics::increment_validation_errors_count("validation error".to_string());
@@ -240,6 +205,11 @@ async fn main() {
 
     let (sender, mut receiver) = mpsc::channel(1024);
     let config = Config::new(envs);
+    let keystores = Keystores::new(
+        &config.keystore_pubkeys_path,
+        &config.keystore_secrets_path,
+        &config.chain,
+    );
 
     let commit_boost_signer_url = &config.commit_boost_signer_url;
     let jwt = &config.jwt_hex;
@@ -260,6 +230,8 @@ async fn main() {
 
     let beacon_client = Client::new(config.beacon_api_url.clone());
 
+    let relay_client = reqwest::Client::builder().build().expect("failed to create relay client");
+
     let client_state = ClientState::new(config.execution_api_url.clone());
     // let mut constraint_state = Arc::new(RwLock::new(ConstraintState::new( beacon_client.clone(), config.validator_indexes.clone(), config.chain.get_commitment_deadline_duration()))) ;
     let constraint_state = ConstraintState::new(
@@ -277,38 +249,14 @@ async fn main() {
 
     tracing::debug!("Connected to the server!");
 
-    let signer: Arc<dyn Signer>;
-    if web3signer_enabled {
-        let web3signer_url = config.web3signer_url.clone();
-        // let creds = Web3SignerTlsCredentials {
-        //     ca_cert_path: config.ca_cert_path.clone(),
-        //     combined_pem_path: config.combined_pem_path.clone(),
-        // };
-        let mut web3signer = Web3Signer::connect(web3signer_url)
-            .await
-            .expect("Web3signer connection failed!");
-        signer = Arc::new(web3signer);
-    } else {
-        let mut cb_signer = CBSigner::new(commit_boost_signer_url, jwt);
-        signer = Arc::new(cb_signer);
-    }
-
-    let accounts = signer
-            .list_accounts()
-            .await
-            .expect("Web3signer fetching failed!");
-  
-    tracing::info!(?accounts);
-
-    let _ = send_sidecar_info(
-        accounts,
-        config.sidecar_info_sender_url,
-        config.commitment_port,
-    )
-    .await;
+    // let _ = send_sidecar_info(
+    //     accounts,
+    //     config.sidecar_info_sender_url,
+    //     config.commitment_port,
+    // )
+    // .await;
 
     let constraint_state_arc = Arc::new(Mutex::new(constraint_state));
-
     let commit_boost_api = Arc::new(Mutex::new(commit_boost_api));
     let fallback_builder = Arc::new(Mutex::new(fallback_builder));
 
@@ -321,7 +269,7 @@ async fn main() {
                 tracing::info!("received preconf request");
                 let constraint_state_clone = Arc::clone(&constraint_state_arc);
                 tokio::spawn(
-                    handle_preconfirmation_request(req, res, constraint_state_clone, signer.clone())
+                    handle_preconfirmation_request(req, res, constraint_state_clone, keystores.clone(), relay_client.clone(), config.relay_url.clone())
                 );
             },
             Some(slot) = constraint_state_inner.commitment_deadline.wait() => {

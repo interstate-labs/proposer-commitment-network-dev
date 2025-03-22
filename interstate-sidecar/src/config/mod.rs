@@ -30,6 +30,8 @@ pub struct Config {
     pub builder_port: u16,
     /// The constraints collector url
     pub cb_url: Url,
+    /// relay url
+    pub relay_url: Url,
     /// The router url
     pub sidecar_info_sender_url: Url,
     /// URL for the beacon client API URL
@@ -46,6 +48,10 @@ pub struct Config {
     pub fee_recipient: Address,
     /// Local builder bls private key for signing fallback payloads.
     pub builder_bls_private_key: BLSSecretKey,
+    pub keystore_secrets_path: PathBuf,
+    /// Path to the keystores folder.
+    pub keystore_pubkeys_path: PathBuf,
+    /// Path to the delegations file.
     /// Gateway contract address
     pub gateway_contract: Address,
     /// Web3Signer settings
@@ -62,6 +68,7 @@ impl Default for Config {
             builder_port: DEFAULT_MEV_BOOST_PROXY_PORT,
             metrics_port: DEFAULT_METRICS_PORT,
             cb_url: "http://localhost:3030".parse().expect("Valid URL"),
+            relay_url: "http://localhost:3040".parse().expect("Valid URL"),
             sidecar_info_sender_url: "http://localhost:8000".parse().expect("Valid URL"),
             beacon_api_url: "http://localhost:5052".parse().expect("Valid URL"),
             execution_api_url: "http://localhost:8545".parse().expect("Valid URL"),
@@ -76,6 +83,12 @@ impl Default for Config {
             ca_cert_path: String::new(),
             combined_pem_path: String::new(),
             commit_boost_signer_url: String::new(),
+            keystore_secrets_path: PathBuf::from(
+                "/root/assigned_data/secrets",
+            ),
+            keystore_pubkeys_path: PathBuf::from(
+                "/root/assigned_data/keys",
+            ),
         }
     }
 }
@@ -102,6 +115,7 @@ impl Config {
             metrics_port: envs["METRICS_PORT"].parse().unwrap(),
             builder_port: envs["BUILDER_PORT"].parse().unwrap(),
             cb_url: envs["CB_URL"].parse().expect("Valid URL"),
+            relay_url: envs["RELAY_URL"].parse().expect("Valid URL"),
             sidecar_info_sender_url: envs["SIDECAR_INFO_SENDER_URL"].parse().expect("Valid URL"),
             beacon_api_url: envs["BEACON_API_URL"].parse().expect("Valid URL"),
             execution_api_url: envs["EXECUTION_API_URL"].parse().expect("Valid URL"),
@@ -121,6 +135,8 @@ impl Config {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or_else(|| "".to_string()),
             commit_boost_signer_url: envs["COMMIT_BOOST_SIGNER_URL"].parse().unwrap(),
+            keystore_secrets_path: PathBuf::from(envs["KEYSTORE_SECRETS_PATH"].as_str()),
+            keystore_pubkeys_path: PathBuf::from(envs["KEYSTORE_PUBKEYS_PATH"].as_str()),
         }
     }
 }
