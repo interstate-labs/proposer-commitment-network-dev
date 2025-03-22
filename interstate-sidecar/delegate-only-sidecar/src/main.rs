@@ -59,9 +59,9 @@ async fn main() ->eyre::Result<()> {
         Action::Delegate,
     ).expect("Invalid signed message request");
 
-    // let signed_messages_web3 = generate_from_web3signer(Web3SignerOpts{ url:web3signer_url}, delegatee_pubkey, Action::Delegate).await?;
-
     debug!("Signed {} messages with keystore", signed_messages.len());
+    
+    // let signed_messages_web3 = generate_from_web3signer(Web3SignerOpts{ url:web3signer_url}, delegatee_pubkey, Action::Delegate).await?;
     // debug!("Signed {} messages with web3signature", signed_messages_web3.len());
 
 
@@ -70,7 +70,7 @@ async fn main() ->eyre::Result<()> {
         verify_message_signature(message, Chain::Kurtosis).expect("invalid signature");
     }
 
-    write_to_file(out.as_str(), &signed_messages).expect("invalid file");
+    // write_to_file(out.as_str(), &signed_messages).expect("invalid file");
 
     // write_to_file(out_web3.as_str(), &signed_messages_web3).expect("invalid file");
 
