@@ -42,6 +42,8 @@ impl Keystores {
     pub fn new(pubkeys_root_path: &Path, secrets_path: &Path, chain: &ChainConfig) -> Self {
         let mut keystore_paths = Vec::new();
 
+        tracing::debug!(?pubkeys_root_path, ?secrets_path, "path");
+
         for dir_entry in read_dir(&pubkeys_root_path.to_path_buf()).expect(&format!(
             "invalid pubkeys root path {:#?}",
             pubkeys_root_path
@@ -77,7 +79,7 @@ impl Keystores {
 
             keypairs.push(keypair);
         }
-
+        tracing::debug!("keypairs from local {}", keypairs.len());
         Self {
             keypairs,
             chain: chain.clone(),
