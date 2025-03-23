@@ -88,6 +88,11 @@ async fn main() ->eyre::Result<()> {
             .send()
             .await?;
 
+        if response.status() != StatusCode::OK {
+            error!("failed to send  delegations to relay");
+        } else {
+            info!("submited  {} delegations to relay", signed_messages.len());
+        }
     }
 
     if signer_type == "WEB3SIGNER" {
@@ -110,12 +115,12 @@ async fn main() ->eyre::Result<()> {
             .body(serde_json::to_string(&signed_messages_web3)?)
             .send()
             .await?;
-    }
-        
-    if response.status() != StatusCode::OK {
-        error!("failed to send  delegations to relay");
-    } else {
-        info!("submited  {} delegations to relay", signed_messages_web3.len());
+
+        if response.status() != StatusCode::OK {
+            error!("failed to send  delegations to relay");
+        } else {
+            info!("submited  {} delegations to relay", signed_messages_web3.len());
+        }
     }
 
     Ok(())
