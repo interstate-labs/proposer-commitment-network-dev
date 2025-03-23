@@ -52,12 +52,12 @@ pub async fn revoke(signer_type: &str) ->eyre::Result<()> {
     let delegatee_pubkey:BlsPublicKey = parse_bls_public_key(delegate_pbukey_str.as_str()).expect("Invalid public key");
     let relay_url  = env::var("RELAY_URL").expect("couldn't find relay url in env file");
 
-    let mut signed_messages = None;
     if (signer_type == "keystores") {
+        let password_path = env::var("SECRETS_PATH").expect("couldn't find secrets path in env file");
+
         let keystore_secret = KeystoreSecret::from_directory(password_path.as_str()).unwrap();
 
         let keys_path = env::var("KEYS_PATH").expect("couldn't find keys path in env file");
-        let password_path = env::var("SECRETS_PATH").expect("couldn't find secrets path in env file");
 
         let signed_messages = generate_from_keystore(
             &keys_path,

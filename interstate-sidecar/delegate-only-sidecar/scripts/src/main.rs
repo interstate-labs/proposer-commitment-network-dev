@@ -3,6 +3,8 @@ use tracing::error;
 
 /// CLI command definitions and options.
 mod cli;
+mod delegate;
+mod revoke;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {

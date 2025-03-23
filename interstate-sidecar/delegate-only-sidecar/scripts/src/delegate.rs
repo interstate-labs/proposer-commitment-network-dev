@@ -1,5 +1,5 @@
 use std::{fs, fs::DirEntry, path::PathBuf, env, collections::HashMap, ffi::OsString, io, path::Path};
-use dotenvy::dotenvy;
+use dotenv::dotenv;
 use alloy::{
     primitives::B256,
     signers::k256::sha2::{Digest, Sha256},
@@ -40,7 +40,7 @@ struct Cli {
 
 
 // signer string is one of ['keystores', 'web3signer', 'commit-boost-signer', 'dirk']
-pub fn delegate(signer_type: str, delegatee_pubkey: BlsPublicKey, relay_url: str) ->eyre::Result<()> {
+pub async fn delegate(signer_type: &str, delegatee_pubkey: &BlsPublicKey, relay_url: &str) -> eyre::Result<()> {
     dotenv().ok();
 
     let subscriber = Subscriber::builder()
@@ -51,7 +51,7 @@ pub fn delegate(signer_type: str, delegatee_pubkey: BlsPublicKey, relay_url: str
 
     let mut signed_messages = None;
 
-    if (&signer_type == "keystores") {
+    if (signer_type == "keystores") {
         // keystores
         let password_path = env::var("SECRETS_PATH").expect("couldn't find secrets path in env file");
         let keystore_secret = KeystoreSecret::from_directory(password_path.as_str()).unwrap();
@@ -65,13 +65,34 @@ pub fn delegate(signer_type: str, delegatee_pubkey: BlsPublicKey, relay_url: str
             Action::Delegate,
         ).expect("Invalid signed message request");
 
-    } else if (&signer_type == "web3signer") {
+        debug!("Signed {} messages with {}", signed_messages.len(), &signer_type);
+
+
+    } else if (signer_type == "web3signer") {
         // web3signer url
         let web3signer_url = env::var("WEB3SIGNER_URL").expect("couldn't find web3signer url in env file");
-        signed_messages = generate_from_web3signer(Web3SignerOpts{ url:web3signer_url}, delegatee_pubkey, Action::Delegate);
-    } else if (&signer_type == "commit-boost-signer") {
+        
+        // ... and where the web3signer code is:
+        signed_messages = Some(generate_from_web3signer(
+            Web3SignerOpts{ url:web3signer_url}, 
+            delegatee_pubkey.clone(),  // Add .clone() to create an owned copy
+            Action::Delegate
+        ).await?);
 
-    } else if (&signer_type == "dirk") {
+        // signed_messages = generate_from_web3signer(
+        //     Web3SignerOpts{ url:web3signer_url}, 
+        //     delegatee_pubkey, 
+        //     Action::Delegate
+        // ).await?; // Add .await and wrap in Some()
+
+        debug!("signed messages with {}", &signer_type);
+
+        // ToDo enable .len()
+        // debug!("Signed {} messages with {}", signed_messages.len(), &signer_type);
+
+    } else if (signer_type == "commit-boost-signer") {
+
+    } else if (signer_type == "dirk") {
 
     }
 
@@ -87,12 +108,12 @@ pub fn delegate(signer_type: str, delegatee_pubkey: BlsPublicKey, relay_url: str
     let delegatee_pubkey:BlsPublicKey = parse_bls_public_key(delegate_pubkey_str.as_str()).expect("Invalid public key");
 
 
-    debug!("Signed {} messages with {}", signed_messages.len(), signer_type);
-
     // Verify signatures
-    for message in &signed_messages {
-        verify_message_signature(message, Chain::Kurtosis).expect("invalid signature");
-    }
+    for messages in signed_messages.iter() {
+        for message in messages.iter() {
+            verify_message_signature(message, Chain::Kurtosis).expect("invalid signature");
+        }
+        }
 
     write_to_file(out.as_str(), &signed_messages).expect("invalid file");
 
