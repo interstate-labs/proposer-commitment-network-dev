@@ -1,5 +1,4 @@
 use std::{fs, fs::DirEntry, path::PathBuf, env, collections::HashMap, ffi::OsString, io, path::Path};
-use dotenv::dotenv;
 use alloy::{
     primitives::B256,
     signers::k256::sha2::{Digest, Sha256},
@@ -41,7 +40,6 @@ struct Cli {
 
 // signer string is one of ['keystores', 'web3signer', 'commit-boost-signer', 'dirk']
 pub async fn delegate(signer_type: &str, delegatee_pubkey: &BlsPublicKey, relay_url: &str) -> eyre::Result<()> {
-    dotenv().ok();
 
     let subscriber = Subscriber::builder()
         .with_max_level(tracing::Level::DEBUG)

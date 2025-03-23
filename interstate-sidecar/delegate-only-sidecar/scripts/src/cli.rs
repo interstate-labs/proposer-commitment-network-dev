@@ -19,6 +19,12 @@ pub struct Opts {
     pub command: Commands
 }
 
+#[async_trait::async_trait]
+pub trait Command {
+    async fn run(&self) -> eyre::Result<()>;
+}
+
+
 #[derive(Debug, Subcommand)]
 pub enum Commands {
     /// Delegate validator keys
@@ -58,22 +64,14 @@ pub struct RevokeCommand {
     pub output_path: String,
 }
 
-impl Cli {
-    pub async fn run(self) -> Result<()> {
-        match self.command {
-            Commands::Delegate(cmd) => {
-                // Implement delegate command
-                println!("Delegating to {}", cmd.delegatee_pubkey);
-                delegate::delegate(&cmd.signer_type, &cmd.delegatee_pubkey, &cmd.relay_url).await?;
-                Ok(())
-            }
-
-            Commands::Revoke(cmd) => {
-                // Implement revoke command
-                println!("Revoking delegation for {}", &cmd.signer_type);
-                revoke::revoke(&cmd.signer_type).await?;
-                Ok(())
-            }
+// Implement the trait for your Commands enum
+#[async_trait::async_trait]
+impl Command for Commands {
+    async fn run(&self) -> eyre::Result<()> {
+        match self {
+            Commands::Delegate(cmd) => cmd.run().await,
+            Commands::Revoke(cmd) => cmd.run().await,
+            // Add other command variants as needed
         }
     }
 }
