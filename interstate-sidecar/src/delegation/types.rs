@@ -3,7 +3,7 @@ use alloy_v092::{providers::Provider, transports::Transport};
 use clap::ValueEnum;
 use ethereum_consensus::crypto::{PublicKey as BlsPublicKey, Signature as BlsSignature};
 use eyre::Result;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::signing::verify_commit_boost_root;
 
@@ -116,13 +116,13 @@ impl SignedMessage {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SignedDelegation {
     pub message: DelegationMessage,
     pub signature: BlsSignature,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DelegationMessage {
     action: u8,
     pub validator_pubkey: BlsPublicKey,

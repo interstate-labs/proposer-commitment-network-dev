@@ -44,9 +44,7 @@ impl Web3Signer {
     /// This is due to signing only being over the consensus type.
     ///
     /// Reference: https://commit-boost.github.io/commit-boost-client/api/
-    pub async fn list_accounts(&self) ->Result<Vec<String>, Box<dyn std::error::Error>> {
-        tracing::debug!("list_accounts ");
-        
+    pub async fn w3_list_accounts(&self) -> Result<Vec<String>> {
         let path = self.base_url.join("/signer/v1/get_pubkeys")?;
         tracing::info!(?path);
         let resp = self
@@ -71,7 +69,7 @@ impl Web3Signer {
     /// This will sign an arbituary root over the consensus type.
     ///
     /// Reference: https://commit-boost.github.io/commit-boost-client/api/
-    pub async fn request_signature(&self, pub_key: &str, object_root: &str) -> Result<String> {
+    pub async fn w3_request_signature(&self, pub_key: &str, object_root: &str) -> Result<String> {
         let path = self.base_url.join("/signer/v1/request_signature")?;
         let body = CommitBoostSignatureRequest {
             type_: "consensus".to_string(),
@@ -175,7 +173,7 @@ pub async fn generate_from_web3signer(
     let mut web3signer = Web3Signer::connect(opts.url).await?;
 
     // Read in the accounts from the remote keystore.
-    let accounts = web3signer.list_accounts().await.expect("faliled to get accounts");
+    let accounts = web3signer.w3_list_accounts().await?;
     debug!("Found {} remote accounts to sign with", accounts.len());
 
     let mut signed_messages = Vec::with_capacity(accounts.len());
@@ -192,7 +190,7 @@ pub async fn generate_from_web3signer(
                 // Web3Signer expects the pre-pended 0x.
                 let signing_root = format!("0x{}", &hex::encode(message.digest()));
                 let returned_signature = web3signer
-                    .request_signature(&account, &signing_root)
+                    .w3_request_signature(&account, &signing_root)
                     .await?;
                 // Trim the 0x.
                 let trimmed_signature = trim_hex_prefix(&returned_signature)?;
@@ -205,7 +203,7 @@ pub async fn generate_from_web3signer(
                 // Web3Signer expects the pre-pended 0x.
                 let signing_root = format!("0x{}", &hex::encode(message.digest()));
                 let returned_signature = web3signer
-                    .request_signature(&account, &signing_root)
+                    .w3_request_signature(&account, &signing_root)
                     .await?;
                 // Trim the 0x.
                 let trimmed_signature = trim_hex_prefix(&returned_signature)?;
