@@ -1,1 +1,0 @@
-/Users/irfanshaik/proposer-commitment-network-dev/interstate-sidecar/delegate-only-sidecar/scripts/target/release/scripts: /Users/irfanshaik/proposer-commitment-network-dev/interstate-sidecar/delegate-only-sidecar/scripts/src/cli.rs /Users/irfanshaik/proposer-commitment-network-dev/interstate-sidecar/delegate-only-sidecar/scripts/src/main.rs

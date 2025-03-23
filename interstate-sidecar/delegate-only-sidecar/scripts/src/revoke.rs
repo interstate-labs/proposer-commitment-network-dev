@@ -38,8 +38,8 @@ struct Cli {
     action: Action,
 }
 
-
-pub fn revoke() ->eyre::Result<()> {
+// signer string is one of ['keystores', 'web3signer', 'commit-boost-signer', 'dirk']
+pub async fn revoke(signer_type: &str) ->eyre::Result<()> {
     dotenv().ok();
 
     let subscriber = Subscriber::builder()
@@ -48,54 +48,82 @@ pub fn revoke() ->eyre::Result<()> {
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    let keys_path = env::var("KEYS_PATH").expect("couldn't find keys path in env file");
-    let password_path = env::var("SECRETS_PATH").expect("couldn't find secrets path in env file");
-    let out = env::var("OUT_FILE").expect("couldn't find out file in env file");
-    let out_web3 = env::var("OUT_FILE_WEB3").expect("couldn't find out file in env file");
-    let relay_url  = env::var("RELAY_URL").expect("couldn't find relay url in env file");
-    let web3signer_url = env::var("WEB3SIGNER_URL").expect("couldn't find web3signer url in env file");
     let delegate_pbukey_str = env::var("DELEGATEE_PUBLICKEY").expect("couldn't find delegatee publickey in env file");
     let delegatee_pubkey:BlsPublicKey = parse_bls_public_key(delegate_pbukey_str.as_str()).expect("Invalid public key");
-    let keystore_secret = KeystoreSecret::from_directory(password_path.as_str()).unwrap();
+    let relay_url  = env::var("RELAY_URL").expect("couldn't find relay url in env file");
 
-    let signed_messages = generate_from_keystore(
-        &keys_path,
-        keystore_secret,
-        delegatee_pubkey.clone(),
-        Chain::Kurtosis,
-        Action::Revoke,
-    ).expect("Invalid signed message request");
+    let mut signed_messages = None;
+    if (signer_type == "keystores") {
+        let keystore_secret = KeystoreSecret::from_directory(password_path.as_str()).unwrap();
 
-    let signed_messages_web3 = generate_from_web3signer(Web3SignerOpts{ url:web3signer_url}, delegatee_pubkey, Action::Revoke).await?;
+        let keys_path = env::var("KEYS_PATH").expect("couldn't find keys path in env file");
+        let password_path = env::var("SECRETS_PATH").expect("couldn't find secrets path in env file");
 
-    debug!("Signed {} messages with keystore", signed_messages.len());
-    debug!("Signed {} messages with web3signature", signed_messages_web3.len());
+        let signed_messages = generate_from_keystore(
+            &keys_path,
+            keystore_secret,
+            delegatee_pubkey.clone(),
+            Chain::Kurtosis,
+            Action::Revoke,
+        ).expect("Invalid signed message request");
 
+        // Verify signatures
+        for message in &signed_messages {
+            verify_message_signature(message, Chain::Kurtosis).expect("invalid signature");
+        }
 
-    // Verify signatures
-    for message in &signed_messages {
-        verify_message_signature(message, Chain::Kurtosis).expect("invalid signature");
+        let out = env::var("OUT_FILE").expect("couldn't find out file in env file");
+        debug!("Signed {} messages with keystore", signed_messages.len());
+        write_to_file(out.as_str(), &signed_messages).expect("invalid file");
+
+        let client = reqwest::ClientBuilder::new().build().unwrap();
+
+        let response = client
+            .post(relay_url + PERMISSION_DELEGATE_PATH)
+            .header("content-type", "application/json")
+            .body(serde_json::to_string(&signed_messages)?)
+            .send()
+            .await?;
+    
+        if response.status() != StatusCode::OK {
+            error!("failed to send  delegations to relay");
+        } else {
+            info!("submited  {} delegations to relay", signed_messages.len());
+        }
+    
+    } else if (signer_type == "web3signer") {
+        let web3signer_url = env::var("WEB3SIGNER_URL").expect("couldn't find web3signer url in env file");
+        let signed_messages = generate_from_web3signer(Web3SignerOpts{ url:web3signer_url}, delegatee_pubkey, Action::Revoke).await?;
+
+        // Verify signatures
+        for message in &signed_messages {
+            verify_message_signature(message, Chain::Kurtosis).expect("invalid signature");
+        }
+
+        let out_web3 = env::var("OUT_FILE_WEB3").expect("couldn't find out file in env file");
+        debug!("Signed {} messages with web3signature", signed_messages.len());
+        write_to_file(out_web3.as_str(), &signed_messages).expect("invalid file");
+
+        let client = reqwest::ClientBuilder::new().build().unwrap();
+
+        let response = client
+            .post(relay_url + PERMISSION_DELEGATE_PATH)
+            .header("content-type", "application/json")
+            .body(serde_json::to_string(&signed_messages)?)
+            .send().await?;
+    
+        if response.status() != StatusCode::OK {
+            error!("failed to send  delegations to relay");
+        } else {
+            info!("submited  {} delegations to relay", signed_messages.len());
+        }
+    
+    } else if (signer_type == "commit-boost-signer") {
+
+    } else if (signer_type == "dirk") {
+
     }
 
-    write_to_file(out.as_str(), &signed_messages).expect("invalid file");
-
-    write_to_file(out_web3.as_str(), &signed_messages_web3).expect("invalid file");
-
-    let client = reqwest::ClientBuilder::new().build().unwrap();
-
-    let response = client
-        .post(relay_url + PERMISSION_DELEGATE_PATH)
-        .header("content-type", "application/json")
-        .body(serde_json::to_string(&signed_messages_web3)?)
-        .send()
-        .await?;
-
-
-    if response.status() != StatusCode::OK {
-        error!("failed to send  delegations to relay");
-    } else {
-        info!("submited  {} delegations to relay", signed_messages_web3.len());
-    }
 
     Ok(())
 }

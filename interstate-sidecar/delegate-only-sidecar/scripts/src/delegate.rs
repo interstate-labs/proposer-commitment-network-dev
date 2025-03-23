@@ -1,5 +1,5 @@
 use std::{fs, fs::DirEntry, path::PathBuf, env, collections::HashMap, ffi::OsString, io, path::Path};
-use dotenv::dotenv;
+use dotenvy::dotenvy;
 use alloy::{
     primitives::B256,
     signers::k256::sha2::{Digest, Sha256},
@@ -40,7 +40,7 @@ struct Cli {
 
 
 // signer string is one of ['keystores', 'web3signer', 'commit-boost-signer', 'dirk']
-pub fn delegate(signer_type: str, delegatee_pubkey: str, relay_url: str) ->eyre::Result<()> {
+pub fn delegate(signer_type: str, delegatee_pubkey: BlsPublicKey, relay_url: str) ->eyre::Result<()> {
     dotenv().ok();
 
     let subscriber = Subscriber::builder()
@@ -51,12 +51,13 @@ pub fn delegate(signer_type: str, delegatee_pubkey: str, relay_url: str) ->eyre:
 
     let mut signed_messages = None;
 
-    if (signer_type == "keystores") {
+    if (&signer_type == "keystores") {
         // keystores
+        let password_path = env::var("SECRETS_PATH").expect("couldn't find secrets path in env file");
         let keystore_secret = KeystoreSecret::from_directory(password_path.as_str()).unwrap();
         let keys_path = env::var("KEYS_PATH").expect("couldn't find keys path in env file");
-        let password_path = env::var("SECRETS_PATH").expect("couldn't find secrets path in env file");
-        signed_messages = generate_from_keystore(
+        
+        let signed_messages: Vec<SignedMessage> = generate_from_keystore(
             &keys_path,
             keystore_secret,
             delegatee_pubkey.clone(),
@@ -64,13 +65,13 @@ pub fn delegate(signer_type: str, delegatee_pubkey: str, relay_url: str) ->eyre:
             Action::Delegate,
         ).expect("Invalid signed message request");
 
-    } else if (signer_type == "web3signer") {
+    } else if (&signer_type == "web3signer") {
         // web3signer url
         let web3signer_url = env::var("WEB3SIGNER_URL").expect("couldn't find web3signer url in env file");
-        signed_messages = generate_from_web3signer(Web3SignerOpts{ url:web3signer_url}, delegatee_pubkey, Action::Delegate).await?;
-    } else if (signer_type == "commit-boost-signer") {
+        signed_messages = generate_from_web3signer(Web3SignerOpts{ url:web3signer_url}, delegatee_pubkey, Action::Delegate);
+    } else if (&signer_type == "commit-boost-signer") {
 
-    } else if (signer_type == "dirk") {
+    } else if (&signer_type == "dirk") {
 
     }
 
@@ -106,9 +107,9 @@ pub fn delegate(signer_type: str, delegatee_pubkey: str, relay_url: str) ->eyre:
 
 
     if response.status() != StatusCode::OK {
-        error!("failed to send  delegations to relay");
+        error!("failed to send delegations to relay");
     } else {
-        info!("submited  {} delegations to relay", signed_messages_web3.len());
+        info!("submitted the delegations to relay");
     }
 
     Ok(())

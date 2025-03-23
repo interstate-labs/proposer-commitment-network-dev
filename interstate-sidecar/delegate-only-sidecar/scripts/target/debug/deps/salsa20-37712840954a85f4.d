@@ -1,0 +1,10 @@
+/Users/irfanshaik/proposer-commitment-network-dev/interstate-sidecar/delegate-only-sidecar/scripts/target/debug/deps/libsalsa20-37712840954a85f4.rmeta: /Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/lib.rs /Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/core.rs /Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/rounds.rs /Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/salsa.rs
+
+/Users/irfanshaik/proposer-commitment-network-dev/interstate-sidecar/delegate-only-sidecar/scripts/target/debug/deps/libsalsa20-37712840954a85f4.rlib: /Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/lib.rs /Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/core.rs /Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/rounds.rs /Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/salsa.rs
+
+/Users/irfanshaik/proposer-commitment-network-dev/interstate-sidecar/delegate-only-sidecar/scripts/target/debug/deps/salsa20-37712840954a85f4.d: /Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/lib.rs /Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/core.rs /Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/rounds.rs /Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/salsa.rs
+
+/Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/lib.rs:
+/Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/core.rs:
+/Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/rounds.rs:
+/Users/irfanshaik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/salsa20-0.8.1/src/salsa.rs:
