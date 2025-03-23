@@ -83,7 +83,7 @@ async fn main() ->eyre::Result<()> {
         let client = reqwest::ClientBuilder::new().build().unwrap();
 
         let response = client
-            .post(relay_endpoint)
+            .post(&relay_endpoint)
             .header("content-type", "application/json")
             .body(serde_json::to_string(&signed_messages)?)
             .send()
@@ -111,7 +111,7 @@ async fn main() ->eyre::Result<()> {
         let client = reqwest::ClientBuilder::new().build().unwrap();
 
         let response = client
-            .post(relay_endpoint)
+            .post(&relay_endpoint)
             .header("content-type", "application/json")
             .body(serde_json::to_string(&signed_messages_web3)?)
             .send()
