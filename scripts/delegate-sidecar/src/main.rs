@@ -59,6 +59,7 @@ async fn main() ->eyre::Result<()> {
     let delegate_pubkey_str = env::var("DELEGATEE_PUBLICKEY").expect("couldn't find delegatee publickey in env file");
     let delegatee_pubkey:BlsPublicKey = parse_bls_public_key(delegate_pubkey_str.as_str()).expect("Invalid public key");
     let keystore_secret = KeystoreSecret::from_directory(password_path.as_str()).unwrap();
+    let relay_endpoint = relay_url + PERMISSION_DELEGATE_PATH;  // Create the full URL once
 
 
     if signer_type == "KEYSTORES" {
@@ -82,7 +83,7 @@ async fn main() ->eyre::Result<()> {
         let client = reqwest::ClientBuilder::new().build().unwrap();
 
         let response = client
-            .post(relay_url + PERMISSION_DELEGATE_PATH)
+            .post(relay_endpoint)
             .header("content-type", "application/json")
             .body(serde_json::to_string(&signed_messages)?)
             .send()
@@ -110,7 +111,7 @@ async fn main() ->eyre::Result<()> {
         let client = reqwest::ClientBuilder::new().build().unwrap();
 
         let response = client
-            .post(relay_url + PERMISSION_DELEGATE_PATH)
+            .post(relay_endpoint)
             .header("content-type", "application/json")
             .body(serde_json::to_string(&signed_messages_web3)?)
             .send()
