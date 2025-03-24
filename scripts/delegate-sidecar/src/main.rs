@@ -49,20 +49,19 @@ async fn main() ->eyre::Result<()> {
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    let signer_type = env::var("SIGNER_TYPE").expect("please set a signer_type");
-    let keys_path = env::var("KEYS_PATH").expect("couldn't find keys path in env file");
-    let password_path = env::var("SECRETS_PATH").expect("couldn't find secrets path in env file");
-    let out = env::var("OUT_FILE").expect("couldn't find out file in env file");
-    let out_web3 = env::var("OUT_FILE_WEB3").expect("couldn't find out file in env file");
     let relay_url  = env::var("RELAY_URL").expect("couldn't find relay url in env file");
-    let web3signer_url = env::var("WEB3SIGNER_URL").expect("couldn't find web3signer url in env file");
     let delegate_pubkey_str = env::var("DELEGATEE_PUBLICKEY").expect("couldn't find delegatee publickey in env file");
     let delegatee_pubkey:BlsPublicKey = parse_bls_public_key(delegate_pubkey_str.as_str()).expect("Invalid public key");
-    let keystore_secret = KeystoreSecret::from_directory(password_path.as_str()).unwrap();
     let relay_endpoint = relay_url + PERMISSION_DELEGATE_PATH;  // Create the full URL once
 
 
     if signer_type == "KEYSTORES" {
+        let signer_type = env::var("SIGNER_TYPE").expect("please set a signer_type");
+        let keys_path = env::var("KEYS_PATH").expect("couldn't find keys path in env file");
+        let password_path = env::var("SECRETS_PATH").expect("couldn't find secrets path in env file");
+        let out = env::var("OUT_FILE").expect("couldn't find out file in env file");
+        let keystore_secret = KeystoreSecret::from_directory(password_path.as_str()).unwrap();
+
         let signed_messages = generate_from_keystore(
             &keys_path,
             keystore_secret,
@@ -97,6 +96,9 @@ async fn main() ->eyre::Result<()> {
     }
 
     if signer_type == "WEB3SIGNER" {
+        let out_web3 = env::var("OUT_FILE_WEB3").expect("couldn't find out file in env file");
+        let web3signer_url = env::var("WEB3SIGNER_URL").expect("couldn't find web3signer url in env file");
+
         let signed_messages_web3 = generate_from_web3signer(
             Web3SignerOpts{
                 url:web3signer_url},
