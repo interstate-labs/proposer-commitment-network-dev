@@ -1,3 +1,4 @@
-cargo run -- delegate 
+To run 1) cp .env.example .env
+update .env
 
-cargo run -- revoke
+2) cargo build && cargo run
