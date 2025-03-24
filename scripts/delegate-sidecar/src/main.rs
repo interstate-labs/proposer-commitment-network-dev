@@ -49,6 +49,7 @@ async fn main() ->eyre::Result<()> {
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
+    let signer_type = env::var("SIGNER_TYPE").expect("please set a signer_type");
     let relay_url  = env::var("RELAY_URL").expect("couldn't find relay url in env file");
     let delegate_pubkey_str = env::var("DELEGATEE_PUBLICKEY").expect("couldn't find delegatee publickey in env file");
     let delegatee_pubkey:BlsPublicKey = parse_bls_public_key(delegate_pubkey_str.as_str()).expect("Invalid public key");
@@ -56,7 +57,6 @@ async fn main() ->eyre::Result<()> {
 
 
     if signer_type == "KEYSTORES" {
-        let signer_type = env::var("SIGNER_TYPE").expect("please set a signer_type");
         let keys_path = env::var("KEYS_PATH").expect("couldn't find keys path in env file");
         let password_path = env::var("SECRETS_PATH").expect("couldn't find secrets path in env file");
         let out = env::var("OUT_FILE").expect("couldn't find out file in env file");
