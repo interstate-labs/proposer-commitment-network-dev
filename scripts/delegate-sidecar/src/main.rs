@@ -54,12 +54,12 @@ async fn main() ->eyre::Result<()> {
     let delegate_pubkey_str = env::var("DELEGATEE_PUBLICKEY").expect("couldn't find delegatee publickey in env file");
     let delegatee_pubkey:BlsPublicKey = parse_bls_public_key(delegate_pubkey_str.as_str()).expect("Invalid public key");
     let relay_endpoint = relay_url + PERMISSION_DELEGATE_PATH;  // Create the full URL once
+    let out = env::var("OUT_FILE").expect("couldn't find out file in env file");
 
 
     if signer_type == "KEYSTORES" {
         let keys_path = env::var("KEYS_PATH").expect("couldn't find keys path in env file");
         let password_path = env::var("SECRETS_PATH").expect("couldn't find secrets path in env file");
-        let out = env::var("OUT_FILE").expect("couldn't find out file in env file");
         let keystore_secret = KeystoreSecret::from_directory(password_path.as_str()).unwrap();
 
         let signed_messages = generate_from_keystore(
@@ -88,14 +88,15 @@ async fn main() ->eyre::Result<()> {
             .send()
             .await?;
 
+        let status = response.status();
         // Print response status
-        info!("Response status: {}", response.status());
-        
+        info!("Response status: {}", status);
+
         // Print response body
         let body = response.text().await?;
         info!("Response body: {}", body);
 
-        if response.status() != StatusCode::OK {
+        if status != StatusCode::OK {
             error!("failed to send  delegations to relay");
         } else {
             info!("submited  {} delegations to relay", signed_messages.len());
@@ -103,7 +104,6 @@ async fn main() ->eyre::Result<()> {
     }
 
     if signer_type == "WEB3SIGNER" {
-        let out_web3 = env::var("OUT_FILE_WEB3").expect("couldn't find out file in env file");
         let web3signer_url = env::var("WEB3SIGNER_URL").expect("couldn't find web3signer url in env file");
 
         let signed_messages_web3 = generate_from_web3signer(
@@ -115,7 +115,7 @@ async fn main() ->eyre::Result<()> {
 
         debug!("Signed {} messages with web3signature", signed_messages_web3.len());
 
-        write_to_file(out_web3.as_str(), &signed_messages_web3).expect("invalid file");
+        write_to_file(out.as_str(), &signed_messages_web3).expect("invalid file");
 
         let client = reqwest::ClientBuilder::new().build().unwrap();
 
@@ -126,14 +126,16 @@ async fn main() ->eyre::Result<()> {
             .send()
             .await?;
 
+        let status = response.status();
+
         // Print response status
-        info!("Response status: {}", response.status());
-        
+        info!("Response status: {}", status);
+
         // Print response body
         let body = response.text().await?;
         info!("Response body: {}", body);
 
-        if response.status() != StatusCode::OK {
+        if status != StatusCode::OK {
             error!("failed to send  delegations to relay");
         } else {
             info!("submited  {} delegations to relay", signed_messages_web3.len());
