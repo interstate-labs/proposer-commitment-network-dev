@@ -155,7 +155,7 @@ async fn main() ->eyre::Result<()> {
             Action::Delegate
             ).await?;
 
-        debug!("Signed {} messages with web3signature", signed_messages_cb.len());
+        debug!("Signed {} messages with commit-boost signer", signed_messages_cb.len());
 
         write_to_file(out_file.as_str(), &signed_messages_cb).expect("invalid file");
 
@@ -462,12 +462,10 @@ pub async fn generate_from_web3signer(
                 let message = DelegationMessage::new(pubkey.clone(), delegatee_pubkey.clone());
                 // Web3Signer expects the pre-pended 0x.
                 let signing_root = format!("0x{}", &hex::encode(message.digest()));
-                tracing::info!(?account, ?signing_root);
                 let returned_signature =
                     web3signer.request_signature(&account, &signing_root).await?;
                 // Trim the 0x.
                 let trimmed_signature = trim_hex_prefix(&returned_signature)?;
-                tracing::info!(?returned_signature, ?trimmed_signature);
                 let signature = BlsSignature::try_from(hex::decode(trimmed_signature)?.as_slice())?;
                 let signed = SignedDelegation { message, signature };
                 signed_messages.push(SignedMessage::Delegation(signed));
@@ -774,7 +772,6 @@ pub async fn generate_from_cbsigner(
         // Parse the BLS key of the account.
         // Trim the pre-pended 0x.
         let trimmed_account = trim_hex_prefix(&account)?;
-        debug!(?trimmed_account);
         let pubkey = BlsPublicKey::try_from(hex::decode(trimmed_account)?.as_slice())?;
 
         match action {
@@ -782,12 +779,10 @@ pub async fn generate_from_cbsigner(
                 let message = DelegationMessage::new(pubkey.clone(), delegatee_pubkey.clone());
                 // Web3Signer expects the pre-pended 0x.
                 let signing_root = format!("0x{}", &hex::encode(message.digest()));
-                tracing::info!(?account, ?signing_root);
                 let returned_signature =
                     cb_signer.request_signature(&account, &signing_root).await?;
                 // Trim the 0x.
                 let trimmed_signature = trim_hex_prefix(&returned_signature.trim_matches('"'))?;
-                tracing::info!(?returned_signature, ?trimmed_signature);
                 let signature = BlsSignature::try_from(hex::decode(trimmed_signature)?.as_slice())?;
                 let signed = SignedDelegation { message, signature };
                 signed_messages.push(SignedMessage::Delegation(signed));
