@@ -88,6 +88,13 @@ async fn main() ->eyre::Result<()> {
             .send()
             .await?;
 
+        // Print response status
+        info!("Response status: {}", response.status());
+        
+        // Print response body
+        let body = response.text().await?;
+        info!("Response body: {}", body);
+
         if response.status() != StatusCode::OK {
             error!("failed to send  delegations to relay");
         } else {
@@ -118,6 +125,13 @@ async fn main() ->eyre::Result<()> {
             .body(serde_json::to_string(&signed_messages_web3)?)
             .send()
             .await?;
+
+        // Print response status
+        info!("Response status: {}", response.status());
+        
+        // Print response body
+        let body = response.text().await?;
+        info!("Response body: {}", body);
 
         if response.status() != StatusCode::OK {
             error!("failed to send  delegations to relay");
