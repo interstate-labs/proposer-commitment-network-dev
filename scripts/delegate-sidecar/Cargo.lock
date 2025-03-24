@@ -1528,6 +1528,7 @@ dependencies = [
  "eth2_keystore",
  "ethereum-consensus",
  "eyre",
+ "futures",
  "hex",
  "prost",
  "rand 0.8.5",

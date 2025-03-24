@@ -1,4 +1,4 @@
-use std::{fs, fs::DirEntry, path::PathBuf, env, collections::HashMap, ffi::OsString, io, path::Path};
+use std::{collections::HashMap, env, ffi::OsString, fs::{self, DirEntry}, io, path::{Path, PathBuf}, sync::Arc};
 use dotenv::dotenv;
 use alloy::{
     primitives::B256,
@@ -12,8 +12,9 @@ use ethereum_consensus::{
 };
 use eyre::{bail, eyre, Context, ContextCompat, Result};
 use lighthouse_eth2_keystore::Keystore;
-use reqwest::{Certificate, Identity, StatusCode, Url};
+use reqwest::{header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE}, Certificate, Client, Identity, StatusCode, Url};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::fmt::Subscriber;
 
@@ -87,22 +88,24 @@ async fn main() ->eyre::Result<()> {
             .body(serde_json::to_string(&signed_messages)?)
             .send()
             .await?;
-
+        // Store the status code before consuming the response
+        let status = response.status();
+        
         // Print response status
-        info!("Response status: {}", response.status());
+        info!("Response status: {}", status);
         
         // Print response body
         let body = response.text().await?;
         info!("Response body: {}", body);
 
-        if response.status() != StatusCode::OK {
+        if status != StatusCode::OK {
             error!("failed to send  delegations to relay");
         } else {
             info!("submited  {} delegations to relay", signed_messages.len());
         }
     }
 
-    if signer_type == "WEB3SIGNER" {
+    else if signer_type == "WEB3SIGNER" {
         let out_web3 = env::var("OUT_FILE_WEB3").expect("couldn't find out file in env file");
         let web3signer_url = env::var("WEB3SIGNER_URL").expect("couldn't find web3signer url in env file");
 
@@ -118,6 +121,7 @@ async fn main() ->eyre::Result<()> {
         write_to_file(out_web3.as_str(), &signed_messages_web3).expect("invalid file");
 
         let client = reqwest::ClientBuilder::new().build().unwrap();
+        info!("relay endpoint is {}", relay_endpoint);
 
         let response = client
             .post(&relay_endpoint)
@@ -126,17 +130,55 @@ async fn main() ->eyre::Result<()> {
             .send()
             .await?;
 
-        // Print response status
-        info!("Response status: {}", response.status());
+        // Store the status code before consuming the response
+        let status = response.status();
         
-        // Print response body
-        let body = response.text().await?;
-        info!("Response body: {}", body);
+        // Print response status
+        info!("Response status: {}", status);
 
-        if response.status() != StatusCode::OK {
+        if status != StatusCode::OK {
             error!("failed to send  delegations to relay");
         } else {
             info!("submited  {} delegations to relay", signed_messages_web3.len());
+        }
+    }
+
+    else if signer_type == "COMMITBOOST" {
+        let out_file = env::var("OUT_FILE_CB").expect("couldn't find out file in env file");
+        let jwt = env::var("JWT").expect("couldn't find out file in env file");
+        let commit_boost_url = env::var("COMMIT_BOOST_SIGNER_URL").expect("couldn't find web3signer url in env file");
+
+        let signed_messages_cb = generate_from_cbsigner(
+            commit_boost_url,
+            jwt,
+            delegatee_pubkey,
+            Action::Delegate
+            ).await?;
+
+        debug!("Signed {} messages with web3signature", signed_messages_cb.len());
+
+        write_to_file(out_file.as_str(), &signed_messages_cb).expect("invalid file");
+
+        let client = reqwest::ClientBuilder::new().build().unwrap();
+        info!("relay endpoint is {}", relay_endpoint);
+
+        let response = client
+            .post(&relay_endpoint)
+            .header("content-type", "application/json")
+            .body(serde_json::to_string(&signed_messages_cb)?)
+            .send()
+            .await?;
+
+        // Store the status code before consuming the response
+        let status = response.status();
+        
+        // Print response status
+        info!("Response status: {}", status);
+
+        if status != StatusCode::OK {
+            error!("failed to send  delegations to relay");
+        } else {
+            info!("submited  {} delegations to relay", signed_messages_cb.len());
         }
     }
 
@@ -420,10 +462,12 @@ pub async fn generate_from_web3signer(
                 let message = DelegationMessage::new(pubkey.clone(), delegatee_pubkey.clone());
                 // Web3Signer expects the pre-pended 0x.
                 let signing_root = format!("0x{}", &hex::encode(message.digest()));
+                tracing::info!(?account, ?signing_root);
                 let returned_signature =
                     web3signer.request_signature(&account, &signing_root).await?;
                 // Trim the 0x.
                 let trimmed_signature = trim_hex_prefix(&returned_signature)?;
+                tracing::info!(?returned_signature, ?trimmed_signature);
                 let signature = BlsSignature::try_from(hex::decode(trimmed_signature)?.as_slice())?;
                 let signed = SignedDelegation { message, signature };
                 signed_messages.push(SignedMessage::Delegation(signed));
@@ -709,4 +753,152 @@ pub enum KeystoreSecret {
     /// When using a directory to hold individual passwords for each validator
     /// according to the format: secrets/0x{validator_pubkey} = {password}
     Directory(HashMap<String, String>),
+}
+
+pub async fn generate_from_cbsigner(
+    url: String,
+    jwt: String,
+    delegatee_pubkey: BlsPublicKey,
+    action: Action,
+) -> Result<Vec<SignedMessage>> {
+    // Connect to web3signer.
+    let mut cb_signer = CBSigner::new(&url, &jwt);
+
+    // Read in the accounts from the remote keystore.
+    let accounts = cb_signer.get_list_accounts().await.expect("Commit Boost Signer fetching accounts failed!");
+    debug!("Found {} remote accounts to sign with", accounts.len());
+
+    let mut signed_messages = Vec::with_capacity(accounts.len());
+
+    for account in accounts {
+        // Parse the BLS key of the account.
+        // Trim the pre-pended 0x.
+        let trimmed_account = trim_hex_prefix(&account)?;
+        debug!(?trimmed_account);
+        let pubkey = BlsPublicKey::try_from(hex::decode(trimmed_account)?.as_slice())?;
+
+        match action {
+            Action::Delegate => {
+                let message = DelegationMessage::new(pubkey.clone(), delegatee_pubkey.clone());
+                // Web3Signer expects the pre-pended 0x.
+                let signing_root = format!("0x{}", &hex::encode(message.digest()));
+                tracing::info!(?account, ?signing_root);
+                let returned_signature =
+                    cb_signer.request_signature(&account, &signing_root).await?;
+                // Trim the 0x.
+                let trimmed_signature = trim_hex_prefix(&returned_signature.trim_matches('"'))?;
+                tracing::info!(?returned_signature, ?trimmed_signature);
+                let signature = BlsSignature::try_from(hex::decode(trimmed_signature)?.as_slice())?;
+                let signed = SignedDelegation { message, signature };
+                signed_messages.push(SignedMessage::Delegation(signed));
+            }
+            Action::Revoke => {
+                let message = RevocationMessage::new(pubkey.clone(), delegatee_pubkey.clone());
+                // Web3Signer expects the pre-pended 0x.
+                let signing_root = format!("0x{}", &hex::encode(message.digest()));
+                let returned_signature =
+                    cb_signer.request_signature(&account, &signing_root).await?;
+                // Trim the 0x.
+                let trimmed_signature = trim_hex_prefix(&returned_signature.trim_matches('"'))?;
+                // let signature = BlsSignature::try_from(trimmed_signature.as_bytes())?;
+                let signature = BlsSignature::try_from(hex::decode(trimmed_signature)?.as_slice())?;
+                let signed = SignedRevocation { message, signature };
+                signed_messages.push(SignedMessage::Revocation(signed));
+            }
+        }
+    }
+
+    Ok(signed_messages)
+}
+
+#[derive(Clone)]
+pub struct CBSigner {
+    client: Client,
+    base_url: String,
+    jwt_token: Arc<Mutex<Option<String>>>,
+}
+
+impl CBSigner {
+    // Constructor to create a new API Client
+    pub fn new(base_url: &str, jwt: &str) -> Self {
+        CBSigner {
+            client: Client::new(),
+            base_url: base_url.to_string(),
+            jwt_token: Arc::new(Mutex::new(Some(jwt.to_string()))),
+        }
+    }
+    // Helper function to construct full URL
+    fn full_url(&self, endpoint: &str) -> String {
+        format!(
+            "{}/{}",
+            self.base_url.trim_end_matches('/'),
+            endpoint.trim_start_matches('/')
+        )
+    }
+    // Generic function to send GET requests with authentication
+    pub async fn get_list_accounts(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let url = self.full_url("signer/v1/get_pubkeys");
+        let jwt = self.jwt_token.lock().await;
+        let mut headers = HeaderMap::new();
+
+        if let Some(token) = jwt.as_ref() {
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&format!("Bearer {}", token))?,
+            );
+        }
+
+        let response = self
+            .client
+            .get(url)
+            .headers(headers)
+            .send()
+            .await?
+            .json::<CommitBoostKeys>()
+            .await?;
+
+        let consensus_keys: Vec<String> = response
+            .keys
+            .into_iter()
+            .map(|key_set| key_set.consensus)
+            .collect();
+        Ok(consensus_keys)
+    }
+
+    // Generic function to send POST requests with authentication
+    pub async fn request_signature(
+        &self,
+        pub_key: &str,
+        object_root: &str,
+    ) -> Result<String> {
+        let url = self.full_url("/signer/v1/request_signature");
+        let jwt = self.jwt_token.lock().await;
+        let mut headers = HeaderMap::new();
+
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        if let Some(token) = jwt.as_ref() {
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&format!("Bearer {}", token))?,
+            );
+        }
+
+        let body = CommitBoostSignatureRequest {
+            type_: "consensus".to_string(),
+            pubkey: pub_key.to_string(),
+            object_root: object_root.to_string(),
+        };
+
+        let response = self
+            .client
+            .post(url)
+            .headers(headers)
+            .json(&body)
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        Ok(response)
+    }
 }
