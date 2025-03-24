@@ -249,13 +249,6 @@ async fn main() {
 
     tracing::debug!("Connected to the server!");
 
-    // let _ = send_sidecar_info(
-    //     accounts,
-    //     config.sidecar_info_sender_url,
-    //     config.commitment_port,
-    // )
-    // .await;
-
     let constraint_state_arc = Arc::new(Mutex::new(constraint_state));
     let commit_boost_api = Arc::new(Mutex::new(commit_boost_api));
     let fallback_builder = Arc::new(Mutex::new(fallback_builder));

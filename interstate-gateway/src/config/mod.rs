@@ -1,4 +1,4 @@
-use group_config::{HOLEKSY_CHAIN_ID, KURTOSIS_CHAIN_ID};
+use group_config::{HOLEKSY_CHAIN_ID, KURTOSIS_CHAIN_ID, MAINNET_CHAIN_ID, HELDER_CHAIN_ID};
 use reqwest::Url;
 
 use rand::RngCore;
@@ -98,14 +98,18 @@ impl Config {
         let chain = ChainConfig {
             chain: match envs["CHAIN"].clone().as_str() {
                 "kurtosis" => Chain::Kurtosis,
+                "mainnet" => Chain::Mainnet,
                 "holesky" => Chain::Holesky,
+                "helder" => Chain::Helder,
                 _ => Chain::Holesky,
             },
             commitment_deadline: envs["COMMITMENT_DEADLINE"].parse().unwrap(),
             slot_time: envs["SLOT_TIME"].parse().unwrap(),
             id: match envs["CHAIN"].clone().as_str() {
                 "kurtosis" => KURTOSIS_CHAIN_ID,
+                "mainnet" => HOLEKSY_CHAIN_ID,
                 "holesky" => HOLEKSY_CHAIN_ID,
+                "helder" => KURTOSIS_CHAIN_ID,
                 _ => HOLEKSY_CHAIN_ID,
             },
         };
@@ -114,9 +118,9 @@ impl Config {
             commitment_port: envs["COMMITMENT_PORT"].parse().unwrap(),
             metrics_port: envs["METRICS_PORT"].parse().unwrap(),
             builder_port: envs["BUILDER_PORT"].parse().unwrap(),
-            cb_url: envs["CB_URL"].parse().expect("Valid URL"),
+            cb_url: "http://localhost:3030".parse().expect("Valid URL"),
             relay_url: envs["RELAY_URL"].parse().expect("Valid URL"),
-            sidecar_info_sender_url: envs["SIDECAR_INFO_SENDER_URL"].parse().expect("Valid URL"),
+            sidecar_info_sender_url: "http://localhost:8000".parse().expect("Valid URL"),
             beacon_api_url: envs["BEACON_API_URL"].parse().expect("Valid URL"),
             execution_api_url: envs["EXECUTION_API_URL"].parse().expect("Valid URL"),
             engine_api_url: envs["ENGINE_API_URL"].parse().expect("Valid URL"),
@@ -124,17 +128,12 @@ impl Config {
             jwt_hex: envs["JWT"].clone(),
             fee_recipient: Address::parse_checksummed(&envs["FEE_RECIPIENT"], None).unwrap(),
             builder_bls_private_key: random_bls_secret(),
-            gateway_contract: envs["GATEWAY_CONTRACT"].parse().unwrap(),
-            web3signer_url: envs["WEB3SIGNER_URL"].parse().unwrap(),
-            ca_cert_path: envs
-                .get("CA_CERT_PATH")
-                .and_then(|v| v.parse().ok())
-                .unwrap_or_else(|| "".to_string()),
-            combined_pem_path: envs
-                .get("CLIENT_COMBINED_PEM_PATH")
-                .and_then(|v| v.parse().ok())
-                .unwrap_or_else(|| "".to_string()),
-            commit_boost_signer_url: envs["COMMIT_BOOST_SIGNER_URL"].parse().unwrap(),
+            gateway_contract: Address::from_str("0x8aC112a5540f441cC9beBcC647041A6E0D595B94")
+            .unwrap(),
+            web3signer_url: "http://localhost:3030".parse().expect("Valid URL"),
+            ca_cert_path: String::new(),
+            combined_pem_path: String::new(),
+            commit_boost_signer_url: "http://localhost:3030".parse().expect("Valid URL"),
             keystore_secrets_path: PathBuf::from(envs["KEYSTORE_SECRETS_PATH"].as_str()),
             keystore_pubkeys_path: PathBuf::from(envs["KEYSTORE_PUBKEYS_PATH"].as_str()),
         }
