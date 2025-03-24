@@ -54,7 +54,6 @@ async fn main() ->eyre::Result<()> {
     let keys_path = env::var("KEYS_PATH").expect("couldn't find keys path in env file");
     let password_path = env::var("SECRETS_PATH").expect("couldn't find secrets path in env file");
     let out = env::var("OUT_FILE").expect("couldn't find out file in env file");
-    let out_web3 = env::var("OUT_FILE_WEB3").expect("couldn't find out file in env file");
     let relay_url  = env::var("RELAY_URL").expect("couldn't find relay url in env file");
     let web3signer_url = env::var("WEB3SIGNER_URL").expect("couldn't find web3signer url in env file");
     let delegate_pbukey_str = env::var("DELEGATEE_PUBLICKEY").expect("couldn't find delegatee publickey in env file");
@@ -105,7 +104,7 @@ async fn main() ->eyre::Result<()> {
         }
 
         debug!("Signed {} messages with web3signature", signed_messages_web3.len());
-        write_to_file(out_web3.as_str(), &signed_messages_web3).expect("invalid file");
+        write_to_file(out.as_str(), &signed_messages_web3).expect("invalid file");
 
         let client = reqwest::ClientBuilder::new().build().unwrap();
 
