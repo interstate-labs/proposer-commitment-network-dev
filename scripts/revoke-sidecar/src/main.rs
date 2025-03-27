@@ -27,7 +27,7 @@ pub const BLS_DST_PREFIX: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_"
 /// Reference: https://eips.ethereum.org/EIPS/eip-2335#test-cases
 pub const DEFAULT_KEYSTORE_PASSWORD: &str = r#"𝔱𝔢𝔰𝔱𝔭𝔞𝔰𝔰𝔴𝔬𝔯𝔡🔑"#;
 
-const PERMISSION_DELEGATE_PATH: &str = "/constraints/v1/builder/delegate";
+const PERMISSION_REVOKE_PATH: &str = "/constraints/v1/builder/revoke";
 
 
 /// CLI arguments
@@ -77,21 +77,19 @@ async fn main() ->eyre::Result<()> {
 
         debug!("Signed {} messages with keystore", signed_messages.len());
 
-        write_to_file(out.as_str(), &signed_messages).expect("invalid file");
-
         let client = reqwest::ClientBuilder::new().build().unwrap();
 
         let response = client
-            .post(relay_url + PERMISSION_DELEGATE_PATH)
+            .post(relay_url + PERMISSION_REVOKE_PATH)
             .header("content-type", "application/json")
             .body(serde_json::to_string(&signed_messages)?)
             .send()
             .await?;
 
         if response.status() != StatusCode::OK {
-            error!("failed to send  delegations to relay");
+            error!("failed to send  revocations to relay");
         } else {
-            info!("submited  {} delegations to relay", signed_messages.len());
+            info!("submited  {} revocations to relay", signed_messages.len());
         }
 
     } else if signer_type == "WEB3SIGNER" {
@@ -104,21 +102,20 @@ async fn main() ->eyre::Result<()> {
         }
 
         debug!("Signed {} messages with web3signature", signed_messages_web3.len());
-        write_to_file(out.as_str(), &signed_messages_web3).expect("invalid file");
 
         let client = reqwest::ClientBuilder::new().build().unwrap();
 
         let response = client
-            .post(relay_url + PERMISSION_DELEGATE_PATH)
+            .post(relay_url + PERMISSION_REVOKE_PATH)
             .header("content-type", "application/json")
             .body(serde_json::to_string(&signed_messages_web3)?)
             .send()
             .await?;
 
         if response.status() != StatusCode::OK {
-            error!("failed to send  delegations to relay");
+            error!("failed to send  revocations to relay");
         } else {
-            info!("submited  {} delegations to relay", signed_messages_web3.len());
+            info!("submited  {} revocations to relay", signed_messages_web3.len());
         }
     }
 

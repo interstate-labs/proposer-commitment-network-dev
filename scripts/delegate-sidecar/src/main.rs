@@ -72,8 +72,6 @@ async fn main() ->eyre::Result<()> {
 
         debug!("Signed {} messages with keystore", signed_messages.len());
 
-        write_to_file(out.as_str(), &signed_messages).expect("invalid file");
-
         // Verify signatures
         for message in &signed_messages {
             verify_message_signature(message, Chain::Kurtosis).expect("invalid signature");
@@ -114,8 +112,6 @@ async fn main() ->eyre::Result<()> {
             ).await?;
 
         debug!("Signed {} messages with web3signature", signed_messages_web3.len());
-
-        write_to_file(out.as_str(), &signed_messages_web3).expect("invalid file");
 
         let client = reqwest::ClientBuilder::new().build().unwrap();
 
