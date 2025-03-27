@@ -66,7 +66,7 @@ async fn main() ->eyre::Result<()> {
             &keys_path,
             keystore_secret,
             delegatee_pubkey.clone(),
-            Chain::Kurtosis,
+            Chain::Helder,
             Action::Delegate,
         ).expect("Invalid signed message request");
 
@@ -74,7 +74,7 @@ async fn main() ->eyre::Result<()> {
 
         // Verify signatures
         for message in &signed_messages {
-            verify_message_signature(message, Chain::Kurtosis).expect("invalid signature");
+            verify_message_signature(message, Chain::Helder).expect("invalid signature");
         }
 
         let client = reqwest::ClientBuilder::new().build().unwrap();
