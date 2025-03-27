@@ -66,13 +66,13 @@ async fn main() ->eyre::Result<()> {
             &keys_path,
             keystore_secret,
             delegatee_pubkey.clone(),
-            Chain::Kurtosis,
+            Chain::Helder,
             Action::Revoke,
         ).expect("Invalid signed message request");
 
         // Verify signatures
         for message in &signed_messages {
-            verify_message_signature(message, Chain::Kurtosis).expect("invalid signature");
+            verify_message_signature(message, Chain::Helder).expect("invalid signature");
         }
 
         debug!("Signed {} messages with keystore", signed_messages.len());
@@ -98,7 +98,7 @@ async fn main() ->eyre::Result<()> {
 
         // Verify signatures
         for message in &signed_messages_web3 {
-            verify_message_signature(message, Chain::Kurtosis).expect("invalid signature");
+            verify_message_signature(message, Chain::Helder).expect("invalid signature");
         }
 
         debug!("Signed {} messages with web3signature", signed_messages_web3.len());
