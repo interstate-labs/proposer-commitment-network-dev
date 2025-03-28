@@ -3927,7 +3927,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "interstate-pbs-module"
+name = "interstate-gateway"
 version = "0.1.0"
 dependencies = [
  "alloy 0.6.4",

@@ -6,7 +6,7 @@ use axum::{
     http::StatusCode,
     middleware::{self, Next},
     response::IntoResponse,
-    routing::post,
+    routing::{post, get}, // Add 'get' to the routing imports
     Json, Router,
 };
 use axum_client_ip::{InsecureClientIp, SecureClientIp, SecureClientIpSource};
@@ -24,6 +24,12 @@ use crate::{
     metrics::ApiMetrics,
 };
 
+// Add this new handler function for the homepage
+async fn handle_home() -> impl IntoResponse {
+    Json(serde_json::json!({ "you're at the interstate rpc, read our docs at https://docs.interstate.so": true }))
+}
+
+
 pub async fn run_commitment_rpc_server(
     event_sender: mpsc::Sender<CommitmentRequestEvent>,
     config: &Config,
@@ -35,6 +41,7 @@ pub async fn run_commitment_rpc_server(
     );
 
     let app = Router::new()
+        .route("/", get(handle_home)) // Add this route for the homepage
         .route("/api/v1/preconfirmation", post(handle_preconfirmation))
         .route_layer(middleware::from_fn(track_metrics))
         .layer(SecureClientIpSource::ConnectInfo.into_extension())
