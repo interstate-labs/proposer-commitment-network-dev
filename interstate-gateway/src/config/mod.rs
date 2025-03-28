@@ -118,7 +118,7 @@ impl Config {
             commitment_port: envs["COMMITMENT_PORT"].parse().unwrap(),
             metrics_port: envs["METRICS_PORT"].parse().unwrap(),
             builder_port: envs["BUILDER_PORT"].parse().unwrap(),
-            cb_url: "http://localhost:3030".parse().expect("Valid URL"),
+            cb_url: envs["RELAY_URL"].parse().expect("Valid URL"),
             relay_url: envs["RELAY_URL"].parse().expect("Valid URL"),
             sidecar_info_sender_url: "http://localhost:8000".parse().expect("Valid URL"),
             beacon_api_url: envs["BEACON_API_URL"].parse().expect("Valid URL"),

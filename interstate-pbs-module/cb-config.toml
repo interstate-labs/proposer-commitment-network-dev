@@ -1,13 +1,13 @@
-chain = "holesky"
+chain = { genesis_time_secs = 1695902400, slot_time_secs = 12, genesis_fork_version = "0x01017000" }
 
 [pbs]
 port = 18550
 host = "0.0.0.0"
 
-genesis_time_sec=1738648239
-beacon_rpc="http://49.13.144.62:32781"
+genesis_time_sec=1695902400
+beacon_rpc="http://5.161.110.21:4000"
 [[relays]]
-url = "http://0xa55c1285d84ba83a5ad26420cd5ad3091e49c55a813eee651cd467db38a8c8e63192f47955e9376f6b42f6d190571cb5@49.13.144.62:32793"
+url = "http://0xa55c1285d84ba83a5ad26420cd5ad3091e49c55a813eee651cd467db38a8c8e63192f47955e9376f6b42f6d190571cb5@49.13.144.62:32792"
 
 [metrics]
 prometheus_config = "./prometheus.yml"

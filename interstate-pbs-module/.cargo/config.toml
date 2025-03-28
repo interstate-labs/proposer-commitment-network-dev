@@ -1,4 +1,4 @@
 [env]
-CB_CONFIG="/root/proposer-commitment-network-dev/interstate-pbs-module/cb-config.toml"
+CB_CONFIG="/home/proposer-commitment-network-dev/interstate-pbs-module/cb-config.toml"
 METRICS_SERVER="10000"
 RUST_LOG="debug"
