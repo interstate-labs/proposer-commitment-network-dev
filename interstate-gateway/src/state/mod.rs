@@ -187,7 +187,7 @@ impl ConstraintState {
         if request.slot < self.current_epoch.start_slot
             || request.slot >= self.current_epoch.start_slot + SLOTS_PER_EPOCH
         {
-            tracing::debug!("slots data: {},{}",request.slot,self.current_epoch.start_slot);
+            tracing::debug!("slots data: {},{},{}",request.slot,self.current_epoch.start_slot, self.current_epoch.start_slot + SLOTS_PER_EPOCH);
             return Err(StateError::InvalidSlot(request.slot));
         }
 

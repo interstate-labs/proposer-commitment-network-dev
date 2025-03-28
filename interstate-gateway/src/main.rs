@@ -77,6 +77,8 @@ async fn handle_preconfirmation_request(
             let delegations: Vec<SignedDelegation> = response.json().await.expect("failed to deserialize delgations");
             let mut signed_contraints_list: Vec<SignedConstraints> = vec![];
 
+           
+
             for delegation in delegations {
                 if (delegation.message.validator_pubkey == pubkey) && (pubkeys.contains(&delegation.message.delegatee_pubkey)) {
 
