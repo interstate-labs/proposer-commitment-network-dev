@@ -107,9 +107,9 @@ impl Config {
             slot_time: envs["SLOT_TIME"].parse().unwrap(),
             id: match envs["CHAIN"].clone().as_str() {
                 "kurtosis" => KURTOSIS_CHAIN_ID,
-                "mainnet" => HOLEKSY_CHAIN_ID,
+                "mainnet" => MAINNET_CHAIN_ID,
                 "holesky" => HOLEKSY_CHAIN_ID,
-                "helder" => KURTOSIS_CHAIN_ID,
+                "helder" => HELDER_CHAIN_ID,
                 _ => HOLEKSY_CHAIN_ID,
             },
         };
